@@ -23,6 +23,20 @@ class DocumentEntityMatcher
         private readonly AccountMatcher $accounts,
     ) {}
 
+    /**
+     * Document types whose line items are catalogue products.
+     *
+     * A receipt, a payment slip or a bank statement has lines, but they are
+     * costs and movements, not stock. Asking the reviewer to link "Bank
+     * charges" to a product — or offering to create one — is noise they have
+     * to read past on every document.
+     */
+    private const PRODUCT_LINE_TYPES = [
+        'sales_invoice', 'purchase_bill', 'credit_note', 'debit_note',
+        'purchase_order', 'sales_order', 'quotation',
+        'warehouse_transfer', 'inventory_adjustment',
+    ];
+
     public function matchAll(DocumentUpload $doc, array $normalized): array
     {
         $matches = [];
@@ -43,13 +57,15 @@ class DocumentEntityMatcher
             $matches[] = $this->saveMatch($doc, 'currency', $normalized['currency_code'], $this->matchCurrency($normalized['currency_code']));
         }
 
-        foreach (($normalized['lines'] ?? []) as $idx => $line) {
-            $name = $line['product_name'] ?? $line['description'] ?? null;
-            if (! $name) {
-                continue;
+        if ($this->hasProductLines($doc, $normalized)) {
+            foreach (($normalized['lines'] ?? []) as $idx => $line) {
+                $name = $line['product_name'] ?? $line['description'] ?? null;
+                if (! $name) {
+                    continue;
+                }
+                $match = $this->matchProduct($name, $line['product_code'] ?? null);
+                $matches[] = $this->saveMatch($doc, 'product', $name, $match, ['line_index' => $idx]);
             }
-            $match = $this->matchProduct($name, $line['product_code'] ?? null);
-            $matches[] = $this->saveMatch($doc, 'product', $name, $match, ['line_index' => $idx]);
         }
 
         foreach (($normalized['journal_entry']['lines'] ?? []) as $idx => $line) {
@@ -73,7 +89,46 @@ class DocumentEntityMatcher
             $matches[] = $this->saveMatch($doc, 'warehouse', $name, $this->matchWarehouse($name), ['role' => $key]);
         }
 
-        return array_values(array_filter($matches));
+        $matches = array_values(array_filter($matches));
+
+        $this->pruneStale($doc, $matches);
+
+        return $matches;
+    }
+
+    /**
+     * Whether this document's lines describe catalogue products.
+     *
+     * The reviewer's corrected type wins over the type the upload was filed
+     * under, so re-running matching after fixing a misread type stops asking
+     * for products the document never had.
+     */
+    private function hasProductLines(DocumentUpload $doc, array $normalized): bool
+    {
+        $type = (string) ($normalized['document_type'] ?? $doc->document_type ?? '');
+
+        return in_array($type, self::PRODUCT_LINE_TYPES, true);
+    }
+
+    /**
+     * Drops match rows this run no longer produced.
+     *
+     * Without this, a line the reviewer renamed or deleted leaves its old row
+     * behind and the table keeps asking to link an entity the document no
+     * longer mentions. Reviewer decisions are kept: a record they selected or
+     * created stays, because it is a decision and an audit trail, not a guess.
+     *
+     * @param  DocumentEntityMatch[]  $current
+     */
+    private function pruneStale(DocumentUpload $doc, array $current): void
+    {
+        $keep = array_map(static fn (DocumentEntityMatch $m) => $m->id, $current);
+
+        DocumentEntityMatch::query()
+            ->where('document_upload_id', $doc->id)
+            ->whereNotIn('match_status', ['user_selected', 'created'])
+            ->when($keep !== [], fn ($q) => $q->whereNotIn('id', $keep))
+            ->delete();
     }
 
     private function saveMatch(DocumentUpload $doc, string $type, ?string $name, array $result, array $extra = []): ?DocumentEntityMatch

@@ -85,7 +85,10 @@ final class DocumentExtractionNormalizerV2
     {
         $totals = is_array($extracted['totals'] ?? null) ? $extracted['totals'] : [];
 
-        $lineSum = round(array_sum(array_column($lines, 'amount')), 2);
+        $lineSum = round(array_sum(array_map(
+            static fn (array $line): float => (float) ($line['amount'] ?? 0) - (float) ($line['tax_amount'] ?? 0),
+            $lines,
+        )), 2);
         $taxSum = round(array_sum(array_column($lines, 'tax_amount')), 2);
 
         $fields = [];
@@ -118,12 +121,12 @@ final class DocumentExtractionNormalizerV2
 
         $discount = $this->amount($totals['discount_total'] ?? null);
         $fields['totals.discount_total'] = $discount === null
-            ? ExtractedField::derived('totals.discount_total', 0.0, 'No discount shown on the document.')
+            ? ExtractedField::derived('totals.discount_total', 0.0, 'The document did not show a discount; treated as zero.')
             : ExtractedField::extracted('totals.discount_total', $discount);
 
         $shipping = $this->amount($totals['shipping'] ?? null);
         $fields['totals.shipping'] = $shipping === null
-            ? ExtractedField::derived('totals.shipping', 0.0, 'No shipping shown on the document.')
+            ? ExtractedField::derived('totals.shipping', 0.0, 'The document did not show shipping; treated as zero.')
             : ExtractedField::extracted('totals.shipping', $shipping);
 
         // Grand total — the figure most worth protecting from silent derivation.
@@ -166,7 +169,7 @@ final class DocumentExtractionNormalizerV2
 
         $paid = $this->amount($totals['paid_amount'] ?? null);
         $fields['totals.paid_amount'] = $paid === null
-            ? ExtractedField::derived('totals.paid_amount', 0.0, 'No payment shown on the document.')
+            ? ExtractedField::derived('totals.paid_amount', 0.0, 'The document did not show an amount paid; treated as zero.')
             : ExtractedField::extracted('totals.paid_amount', $paid);
 
         $balance = $this->amount($totals['balance_due'] ?? null);
@@ -194,6 +197,9 @@ final class DocumentExtractionNormalizerV2
             $qty = $this->amount($line['quantity'] ?? null);
             $rate = $this->amount($line['rate'] ?? null);
             $amount = $this->amount($line['amount'] ?? null);
+            $discount = $this->amount($line['discount'] ?? null);
+            $taxRate = $this->amount($line['tax_rate'] ?? null);
+            $taxAmount = $this->amount($line['tax_amount'] ?? null);
 
             // A line amount we compute is flagged, not disguised.
             $amountOrigin = 'extracted';
@@ -213,9 +219,22 @@ final class DocumentExtractionNormalizerV2
                 'unit' => $this->trimOrNull($line['unit'] ?? null),
                 'rate' => $rate ?? 0,
                 'rate_origin' => $rate === null ? 'defaulted' : 'extracted',
-                'discount' => $this->amount($line['discount'] ?? null) ?? 0,
-                'tax_rate' => $this->amount($line['tax_rate'] ?? null) ?? 0,
-                'tax_amount' => $this->amount($line['tax_amount'] ?? null) ?? 0,
+
+                /*
+                 * Unknown is not zero. A discount or tax the document did not
+                 * show is null, and the origin records that KiteLedger filled
+                 * the working value in. Collapsing both into a bare 0 makes an
+                 * unread tax figure indistinguishable from a genuine zero-rated
+                 * line — which is how an under-declared tax liability reaches a
+                 * posted document with nobody warned.
+                 */
+                'discount' => $discount ?? 0,
+                'discount_origin' => $discount === null ? 'defaulted' : 'extracted',
+                'tax_rate' => $taxRate ?? 0,
+                'tax_rate_origin' => $taxRate === null ? 'defaulted' : 'extracted',
+                'tax_amount' => $taxAmount ?? 0,
+                'tax_amount_origin' => $taxAmount === null ? 'defaulted' : 'extracted',
+
                 'amount' => $amount,
                 'amount_origin' => $amountOrigin,
                 'account_hint' => $this->trimOrNull($line['account_hint'] ?? null),

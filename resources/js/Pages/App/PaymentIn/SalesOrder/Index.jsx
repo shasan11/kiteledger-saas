@@ -54,11 +54,10 @@ export default function SalesOrderIndex(props) {
                     style: { cursor: 'pointer' },
                 })}
                 anchorFilters={[
-                    { key: 'all', label: 'All', params: {} },
-                    { key: 'draft', label: 'Draft', params: { approved: false } },
                     { key: 'approved', label: 'Approved', params: { approved: true } },
+                    { key: 'draft', label: 'Draft', params: { approved: false } },
                 ]}
-                defaultAnchorKey="all"
+                defaultAnchorKey="approved"
                 anchorSyncWithHash
             />
         </AuthenticatedLayout>

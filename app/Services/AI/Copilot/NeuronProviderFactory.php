@@ -50,11 +50,18 @@ class NeuronProviderFactory
         return $caBundle !== '' ? ['verify' => $caBundle] : [];
     }
 
-    public function chat(): AIProviderInterface
+    /**
+     * @param  bool  $interactive  true when a person is waiting on the response,
+     *                             which uses the shorter chat latency budget
+     *                             instead of the long queued-work timeout
+     */
+    public function chat(bool $interactive = false): AIProviderInterface
     {
         $provider = $this->settings->provider();
         $client = new GuzzleHttpClient(
-            timeout: $this->settings->timeoutSeconds(),
+            timeout: $interactive
+                ? $this->settings->interactiveTimeoutSeconds()
+                : $this->settings->timeoutSeconds(),
             connectTimeout: $this->settings->connectTimeoutSeconds(),
             options: $this->sslOptions(),
         );

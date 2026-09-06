@@ -4,8 +4,10 @@ declare(strict_types=1);
 
 namespace Tests\Feature\Documents;
 
+use App\Services\Documents\Pipeline\DocumentPage;
 use App\Services\Documents\Pipeline\DocumentPageAnalysis;
 use App\Services\Documents\Pipeline\DocumentPageService;
+use App\Services\Documents\Pipeline\PageKind;
 use Tests\TestCase;
 
 /**
@@ -82,9 +84,128 @@ class DocumentPageAnalysisTest extends TestCase
 
         $analysis = app(DocumentPageService::class)->analyze($this->pdf([$longText]));
 
-        $this->assertTrue($analysis->hasTextLayer);
+        $this->assertSame(PageKind::NativeText, $analysis->pages[0]->kind);
         $this->assertTrue($analysis->canUseNativeText(), 'A digital PDF should not need vision.');
         $this->assertStringContainsString('INV-1042', $analysis->toPromptText(60000));
+    }
+
+    /**
+     * Builds an analysis directly.
+     *
+     * The mixed-document rule is asserted here rather than through a synthetic
+     * PDF because a scanned page is defined by carrying an image with no text,
+     * and the inline PDF builder above embeds no images — every low-text page it
+     * produces is genuinely blank, which is a different case.
+     *
+     * @param  array<int, array{0: PageKind, 1: string}>  $pages
+     */
+    private function analysisOf(array $pages): DocumentPageAnalysis
+    {
+        return new DocumentPageAnalysis(
+            pageCount: count($pages),
+            pages: array_map(
+                static fn (array $page, int $index) => new DocumentPage(
+                    $index + 1,
+                    $page[0],
+                    $page[1],
+                    mb_strlen($page[1]),
+                ),
+                $pages,
+                array_keys($pages),
+            ),
+            readable: true,
+        );
+    }
+
+    public function test_a_mixed_pdf_does_not_pass_as_fully_digital(): void
+    {
+        /*
+         * The regression this pins: text density was averaged across the whole
+         * document, so a file whose first pages are digital and whose last
+         * pages are scans passed the check collectively. The scanned pages were
+         * then sent to the model as blank and their figures disappeared from
+         * the extraction with no warning at all.
+         */
+        $analysis = $this->analysisOf([
+            [PageKind::NativeText, str_repeat('Digital invoice content. ', 20)],
+            [PageKind::NativeText, str_repeat('More digital content. ', 20)],
+            [PageKind::NativeText, str_repeat('Yet more digital content. ', 20)],
+            [PageKind::ScannedImage, ''],
+            [PageKind::ScannedImage, ''],
+        ]);
+
+        $this->assertFalse(
+            $analysis->canUseNativeText(),
+            'One scanned page must stop the whole document being treated as digital.',
+        );
+        $this->assertTrue($analysis->isMixed());
+        $this->assertCount(2, $analysis->pagesNeedingVision());
+        $this->assertCount(3, $analysis->pagesWithText());
+    }
+
+    public function test_a_mixed_pdf_warns_the_reviewer_about_the_scanned_pages(): void
+    {
+        $warnings = $this->analysisOf([
+            [PageKind::NativeText, str_repeat('Digital invoice content. ', 20)],
+            [PageKind::ScannedImage, ''],
+            [PageKind::ScannedImage, ''],
+        ])->warnings();
+
+        $this->assertNotEmpty($warnings);
+        $this->assertStringContainsString('2 pages', $warnings[0]);
+        $this->assertStringContainsString('scans', $warnings[0]);
+    }
+
+    public function test_blank_trailing_pages_do_not_force_the_whole_document_to_vision(): void
+    {
+        // A separator page with a page number on it is not a scan, and treating
+        // it as one would send every such document through vision needlessly.
+        $analysis = $this->analysisOf([
+            [PageKind::NativeText, str_repeat('Digital invoice content. ', 20)],
+            [PageKind::Empty, ''],
+        ]);
+
+        $this->assertTrue($analysis->canUseNativeText());
+        $this->assertFalse($analysis->isMixed());
+        $this->assertSame([], $analysis->warnings());
+    }
+
+    public function test_an_unreadable_page_is_reported_not_silently_dropped(): void
+    {
+        $warnings = $this->analysisOf([
+            [PageKind::NativeText, str_repeat('Digital invoice content. ', 20)],
+            [PageKind::Unreadable, ''],
+        ])->warnings();
+
+        $this->assertNotEmpty(array_filter(
+            $warnings,
+            static fn (string $w): bool => str_contains($w, 'could not be read'),
+        ));
+    }
+
+    public function test_each_page_is_classified_on_its_own_content(): void
+    {
+        $long = str_repeat('Fully digital page content with plenty of characters. ', 6);
+        $medium = 'Short header only text';
+
+        $analysis = app(DocumentPageService::class)->analyze($this->pdf([$long, $medium]));
+
+        $this->assertSame(PageKind::NativeText, $analysis->pages[0]->kind);
+        $this->assertSame(PageKind::Mixed, $analysis->pages[1]->kind);
+        $this->assertSame(1, $analysis->pages[0]->number, 'Page numbers are 1-based.');
+        $this->assertSame(2, $analysis->pages[1]->number);
+    }
+
+    public function test_pages_needing_vision_are_announced_rather_than_omitted(): void
+    {
+        $long = str_repeat('Digital page content with plenty of characters here. ', 6);
+
+        $analysis = app(DocumentPageService::class)->analyze($this->pdf([$long, 'Short header only']));
+
+        $prompt = $analysis->toPromptText(60000);
+
+        // A silent gap reads to the model as "this page had nothing on it".
+        $this->assertStringContainsString('--- PAGE 2 ---', $prompt);
     }
 
     public function test_page_boundaries_are_preserved_in_the_prompt(): void
@@ -115,7 +236,6 @@ class DocumentPageAnalysisTest extends TestCase
         $analysis = app(DocumentPageService::class)->analyze($this->pdf(['x']));
 
         $this->assertTrue($analysis->readable);
-        $this->assertFalse($analysis->hasTextLayer);
         $this->assertFalse($analysis->canUseNativeText());
     }
 
@@ -141,8 +261,7 @@ class DocumentPageAnalysisTest extends TestCase
     {
         $truncated = new DocumentPageAnalysis(
             pageCount: 500,
-            pageTexts: ['a'],
-            hasTextLayer: true,
+            pages: [new DocumentPage(1, PageKind::NativeText, 'a', 1)],
             truncated: true,
             readable: true,
         );

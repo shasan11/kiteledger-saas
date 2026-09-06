@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Services\AI\Copilot;
 
 use App\Services\AI\Copilot\Tools\CopilotToolResult;
+use App\Support\Money\CurrencyFormatter;
 use Illuminate\Support\Str;
 
 /**
@@ -16,6 +17,8 @@ use Illuminate\Support\Str;
  */
 final class CopilotResponseComposer
 {
+    public function __construct(private readonly CurrencyFormatter $currency) {}
+
     public function fromToolResult(
         CopilotToolResult $result,
         CopilotRoutingDecision $decision,
@@ -49,6 +52,9 @@ final class CopilotResponseComposer
             toolsUsed: [$result->tool],
             filters: $result->appliedFilters,
             currency: $result->currency,
+            currencyDisplay: $result->currency !== null
+                ? $this->currency->info($result->currency)->toArray()
+                : null,
             branchScopeLabel: $result->branchScope,
             asOf: $result->asOf,
             verified: $result->verified,
@@ -65,14 +71,58 @@ final class CopilotResponseComposer
                 continue;
             }
 
+            $money = is_numeric($value) && $result->currency !== null && $this->isMoney((string) $key);
+
             $cards[] = array_filter([
                 'label' => Str::headline((string) $key),
                 'value' => $value,
                 'currency' => is_numeric($value) ? $result->currency : null,
+                'format' => is_numeric($value) ? ($money ? 'money' : 'number') : null,
+                // The rendered string travels with the raw value so the client
+                // never has to guess a symbol or a decimal count.
+                'formatted' => $this->display($result, (string) $key, $value, $money),
             ], static fn ($v) => $v !== null);
         }
 
         return $cards;
+    }
+
+    /**
+     * Prefers the string the executor already rendered; falls back to
+     * formatting here so a result built elsewhere (a test, a future tool) is
+     * still shown with its currency.
+     */
+    private function display(CopilotToolResult $result, string $key, mixed $value, bool $money): ?string
+    {
+        if (isset($result->displayMetrics[$key])) {
+            return $result->displayMetrics[$key];
+        }
+
+        if (! is_numeric($value)) {
+            return null;
+        }
+
+        return $money
+            ? $this->currency->format($value, $result->currency)
+            : $this->currency->plain($value);
+    }
+
+    /**
+     * On a currency-bearing result every figure is money unless its key says
+     * otherwise, because a tool that returns balances also returns the odd
+     * invoice count alongside them.
+     */
+    private function isMoney(string $key): bool
+    {
+        $key = strtolower($key);
+
+        foreach (['count', 'quantity', 'qty', 'days', 'percent', 'ratio', 'number_of', 'units'] as $hint) {
+            if (str_contains($key, $hint)) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     /** @return array<int, array<string, mixed>> */
@@ -84,13 +134,20 @@ final class CopilotResponseComposer
 
         $columns = array_keys($result->rows[0]);
 
+        // A column is money when its own name says so - "balance", "amount" -
+        // never merely because the result carries a currency, since these rows
+        // also hold names, dates and document numbers.
         return [[
             'title' => 'Details',
-            'columns' => array_map(static fn ($c) => [
+            'columns' => array_map(fn ($c) => array_filter([
                 'key' => $c,
                 'label' => Str::headline((string) $c),
-            ], $columns),
+                'format' => $result->currency !== null && CurrencyFormatter::looksMonetary((string) $c)
+                    ? 'money'
+                    : null,
+            ], static fn ($v) => $v !== null), $columns),
             'rows' => $result->rows,
+            'currency' => $result->currency,
         ]];
     }
 
@@ -118,10 +175,14 @@ final class CopilotResponseComposer
             $parts = [];
 
             foreach ($result->metrics as $key => $value) {
-                if (is_scalar($value)) {
-                    $parts[] = Str::headline((string) $key).': '
-                        .($result->currency ? $result->currency.' ' : '').$value;
+                if (! is_scalar($value)) {
+                    continue;
                 }
+
+                $money = is_numeric($value) && $result->currency !== null && $this->isMoney((string) $key);
+
+                $parts[] = Str::headline((string) $key).': '
+                    .($this->display($result, (string) $key, $value, $money) ?? $value);
             }
 
             if ($parts !== []) {

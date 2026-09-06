@@ -31,7 +31,7 @@ class EmployeeDeduction extends Model
     protected function casts(): array
     {
         return [
-            'amount' => 'decimal:2',
+            'amount' => 'decimal:6',
             'recurring' => 'boolean',
             'effective_from' => 'date',
             'effective_to' => 'date',

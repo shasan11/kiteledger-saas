@@ -17,6 +17,7 @@ use App\Models\PurchaseBill;
 use App\Models\PurchaseBillLine;
 use App\Models\PurchaseOrder;
 use App\Models\PurchaseOrderLine;
+use App\Models\Product;
 use App\Models\Quotation;
 use App\Models\QuotationLine;
 use App\Models\SalesOrder;
@@ -149,7 +150,7 @@ class DocumentTransactionConverter
     {
         return array_map(function ($l) {
             return [
-                'product_id' => $l['product_id'] ?? null,
+                'product_id' => $this->getOrCreateProductId($l),
                 'product_name' => $l['product_name'] ?? $l['description'] ?? null,
                 'description' => $l['description'] ?? null,
                 'qty' => $l['qty'] ?? 1,
@@ -166,6 +167,67 @@ class DocumentTransactionConverter
                 'line_total' => $l['line_total'] ?? round(($l['qty'] ?? 1) * ($l['unit_price'] ?? 0), 2),
             ];
         }, $lines);
+    }
+
+    /**
+     * Resolve catalogue items at conversion time, inside the draft transaction.
+     * Viewing a review never mutates the catalogue; creating the draft reuses an
+     * exact code/name match or creates a safe, non-stock service product.
+     */
+    private function getOrCreateProductId(array $line): ?string
+    {
+        $selectedId = $line['product_id'] ?? null;
+
+        if ($selectedId && Product::query()->whereKey($selectedId)->exists()) {
+            return (string) $selectedId;
+        }
+
+        $code = trim((string) ($line['product_code'] ?? $line['sku'] ?? ''));
+
+        if ($code !== '') {
+            $byCode = Product::query()
+                ->where(function ($query) use ($code): void {
+                    $query->where('code', $code)
+                        ->orWhere('sku', $code)
+                        ->orWhere('barcode', $code);
+                })
+                ->first();
+
+            if ($byCode) {
+                return (string) $byCode->id;
+            }
+        }
+
+        $name = trim((string) ($line['product_name'] ?? $line['description'] ?? ''));
+
+        if ($name === '') {
+            return null;
+        }
+
+        $name = mb_substr($name, 0, 180);
+        $existing = Product::query()
+            ->whereRaw('LOWER(name) = ?', [mb_strtolower($name)])
+            ->first();
+
+        if ($existing) {
+            return (string) $existing->id;
+        }
+
+        $product = Product::create([
+            'name' => $name,
+            'code' => $code !== ''
+                ? mb_substr($code, 0, 60)
+                : 'DOC-'.strtoupper(substr(hash('sha256', mb_strtolower($name)), 0, 12)),
+            'sku' => $code !== '' ? mb_substr($code, 0, 80) : null,
+            'description' => $line['description'] ?? null,
+            'product_type' => 'service',
+            'track_inventory' => false,
+            'active' => true,
+            'is_system_generated' => true,
+            'user_add_id' => auth()->id(),
+        ]);
+
+        return (string) $product->id;
     }
 
     private function uniqueDocNo(string $prefix): string

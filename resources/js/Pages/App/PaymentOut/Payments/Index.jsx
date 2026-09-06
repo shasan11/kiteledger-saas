@@ -5,7 +5,7 @@ import { Switch, Tag, Typography } from 'antd';
 import dayjs from 'dayjs';
 import * as Yup from 'yup';
 import ReusableCrud from '@/Components/ReusableCrud';
-import { STATUS_TABS_BY_MODULE, buildStandardFilters, formatMoney, renderApprovedTag, renderOverdueTag, renderStatusTag } from '@/Pages/App/FinanceConfigs';
+import { buildStandardFilters, formatMoney, renderApprovedTag, renderOverdueTag, renderStatusTag } from '@/Pages/App/FinanceConfigs';
 
 const { Text } = Typography;
 
@@ -575,7 +575,6 @@ export default function SupplierPayments() {
                 anchorFilters={[
                     { key: 'approved', label: 'Approved', params: { approved: true } },
                     { key: 'draft',  label: 'Draft',  params: { approved: false } },
-                    { key: 'all',    label: 'All',    params: {} },
                 ]}
                 defaultAnchorKey="approved"
                 anchorSyncWithHash

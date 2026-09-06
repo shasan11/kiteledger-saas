@@ -42,6 +42,7 @@ Homestead.yaml
 
 # Generated at runtime by the installer / Laravel
 /storage/app/installed
+/public/hot
 
  
 /dist/

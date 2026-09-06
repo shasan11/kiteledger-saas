@@ -4,6 +4,7 @@ namespace Tests\Feature\SaaS;
 
 use App\Models\Central\WebsiteContentItem;
 use App\Models\Central\WebsiteFeature;
+use App\Models\Central\NavbarNotification;
 use Database\Seeders\PlatformSettingsSeeder;
 use Database\Seeders\WebsiteSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -68,6 +69,28 @@ class PremiumWebsiteTest extends TestCase
         Cache::put('website-content:v1', ['stale' => true]);
         WebsiteContentItem::create(['type' => 'faq', 'slug' => 'cache-test', 'title' => 'Cache?', 'content' => 'Fresh.', 'status' => 'published']);
         $this->assertNull(Cache::get('website-content:v1'));
+    }
+
+    public function test_active_navbar_notices_are_shared_with_public_pages(): void
+    {
+        $this->seed([PlatformSettingsSeeder::class, WebsiteSeeder::class]);
+
+        NavbarNotification::create([
+            'content' => 'Scheduled maintenance tonight.',
+            'link_label' => 'Read details',
+            'link_url' => '/resources',
+            'target' => 'same_tab',
+            'is_dismissible' => true,
+            'is_active' => true,
+            'starts_at' => now()->subMinute(),
+            'ends_at' => now()->addDay(),
+            'sort_order' => 0,
+        ]);
+
+        $this->get(route('central.home'))->assertOk()->assertInertia(fn ($page) => $page
+            ->has('navbarNotifications', 1)
+            ->where('navbarNotifications.0.content', 'Scheduled maintenance tonight.')
+            ->where('navbarNotifications.0.link_url', '/resources'));
     }
 
     public function test_public_contact_form_is_validated_rate_limited_and_persisted(): void

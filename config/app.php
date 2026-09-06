@@ -55,6 +55,13 @@ return [
     'url' => env('APP_URL', 'http://localhost'),
 
     /*
+    | Allow the local Vite dev server on tenant/custom development domains.
+    | Keep this disabled in production so visitors never receive localhost
+    | asset URLs if a stale hot file is accidentally deployed.
+    */
+    'vite_hot_reload' => (bool) env('VITE_HOT_RELOAD', false),
+
+    /*
     |--------------------------------------------------------------------------
     | Application Timezone
     |--------------------------------------------------------------------------

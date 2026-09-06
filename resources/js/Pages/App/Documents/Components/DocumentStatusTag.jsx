@@ -27,6 +27,25 @@ export const DOCUMENT_STATUS = {
     archived: { label: 'Archived', color: 'default', icon: <InboxOutlined /> },
 };
 
+export function getDocumentStatusIconColor(status, token) {
+    switch (status) {
+        case 'queued':
+        case 'processing':
+            return token.colorInfo;
+        case 'extracted':
+            return token.colorCyan;
+        case 'needs_review':
+            return token.colorWarning;
+        case 'ready':
+        case 'converted':
+            return token.colorSuccess;
+        case 'failed':
+            return token.colorError;
+        default:
+            return token.colorTextTertiary;
+    }
+}
+
 export default function DocumentStatusTag({ status, issueCount = 0 }) {
     const meta = DOCUMENT_STATUS[status] || DOCUMENT_STATUS.uploaded;
 

@@ -46,7 +46,7 @@ Choose exactly one intent:
 - greeting: social opening or thanks with no business request.
 - app_help: how to use KiteLedger, where a feature lives, what a term means, workflow or permission questions.
 - record_lookup: find one specific document or master record, usually by number, code or name.
-- metric_query: asks for a number, total, balance, ranking or list derived from accounting data.
+- metric_query: asks for a number, total, balance, ranking or list derived from accounting, CRM, Projects or other business data.
 - report_navigation: asks which report to use or to open a report.
 - business_analysis: asks why something changed, or to compare and interpret periods.
 - action_proposal: asks to create or change a record.
@@ -54,7 +54,7 @@ Choose exactly one intent:
 - unsupported: outside KiteLedger, or asks for prohibited system access.
 
 Rules:
-- Set requires_live_data true whenever a correct answer depends on current accounting data. Balances, totals, stock, receivables, payables and document statuses always require live data.
+- Set requires_live_data true whenever a correct answer depends on current business data. Balances, totals, stock, receivables, payables, CRM counts, project/task counts and record statuses always require live data.
 - Set requires_knowledge true only for documentation, workflow, navigation or conceptual questions.
 - Resolve relative dates into period_preset rather than guessing exact dates. Only fill date_from/date_to when the user gave explicit dates.
 - Extract entity names exactly as the user wrote them. Never invent an identifier, code or id.

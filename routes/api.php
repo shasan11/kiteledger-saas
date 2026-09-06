@@ -1287,6 +1287,8 @@ Route::middleware(['web', 'auth', 'verified', 'tenant.session', 'tenant.active',
     // Entity matching
     Route::post('{publicId}/match-entities', [DocumentEntityMatchController::class, 'match'])->name('match');
     Route::post('matches/{matchId}/choose', [DocumentEntityMatchController::class, 'chooseMatch'])->name('match.choose');
+    Route::post('matches/{matchId}/link', [DocumentEntityMatchController::class, 'link'])->name('match.link');
+    Route::get('{publicId}/entity-search', [DocumentEntityMatchController::class, 'search'])->name('match.search');
     Route::post('{publicId}/create-missing-fk', [DocumentEntityMatchController::class, 'createFk'])->name('fk.create');
 
     // Proposals

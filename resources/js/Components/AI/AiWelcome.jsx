@@ -1,12 +1,5 @@
-import { Col, Row, Space, Typography, theme } from 'antd';
-import {
-    BankOutlined,
-    BookOutlined,
-    FileSearchOutlined,
-    LineChartOutlined,
-    ShoppingOutlined,
-    WalletOutlined,
-} from '@ant-design/icons';
+import { Typography, theme } from 'antd';
+import CopilotMark from '@/Components/AI/CopilotMark';
 
 const { Title, Text } = Typography;
 
@@ -21,14 +14,12 @@ const GROUPS = [
     {
         key: 'general',
         label: 'Start a conversation',
-        icon: <BankOutlined />,
         prompts: ['Hello - what can you help me with?'],
     },
     {
         key: 'financial',
         requires: 'financial',
         label: 'Financial position',
-        icon: <LineChartOutlined />,
         prompts: [
             'Give me a financial overview for this fiscal year.',
             'How are sales performing this month?',
@@ -38,7 +29,6 @@ const GROUPS = [
         key: 'receivables',
         requires: 'financial',
         label: 'Money owed',
-        icon: <WalletOutlined />,
         prompts: [
             'Which customers owe us the most?',
             'Which supplier bills are due soon?',
@@ -48,7 +38,6 @@ const GROUPS = [
         key: 'records',
         requires: 'tools',
         label: 'Find a record',
-        icon: <FileSearchOutlined />,
         prompts: [
             'Find invoice INV-0001.',
             'Show payments received from a customer.',
@@ -58,7 +47,6 @@ const GROUPS = [
         key: 'help',
         requires: 'rag',
         label: 'How to use KiteLedger',
-        icon: <BookOutlined />,
         prompts: [
             'How do I create and send an invoice?',
             'Which report shows the trial balance?',
@@ -82,100 +70,67 @@ export default function AiWelcome({ onSelect, disabled = false, isMobile = false
         if (group.requires === 'rag') return capabilities.rag;
         return false;
     });
+    const suggestions = groups
+        .flatMap((group) => group.prompts.map((prompt) => ({ prompt, label: group.label })))
+        .slice(0, 6);
 
     return (
-        <div className="kl-rise" style={{ padding: isMobile ? '24px 4px' : '40px 8px', maxWidth: 760, margin: '0 auto' }}>
-            <Space direction="vertical" size={4} style={{ marginBottom: 28, textAlign: 'center', width: '100%' }}>
-                <div
-                    style={{
-                        width: 44,
-                        height: 44,
-                        borderRadius: token.borderRadiusLG,
-                        background: token.colorPrimaryBg,
-                        border: `1px solid ${token.colorPrimaryBorder}`,
-                        color: token.colorPrimary,
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        fontSize: 20,
-                        margin: '0 auto 12px',
-                    }}
-                >
-                    <BankOutlined />
+        <div className="kl-rise" style={{ width: '100%', maxWidth: 720, padding: isMobile ? '20px 4px' : '36px 8px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+                <CopilotMark size={isMobile ? 42 : 48} />
+                <div style={{ minWidth: 0 }}>
+                    <Title
+                        level={2}
+                        style={{ margin: 0, fontSize: isMobile ? 23 : 28, lineHeight: 1.2, letterSpacing: '-0.03em' }}
+                    >
+                        How can I help?
+                    </Title>
+                    <Text type="secondary" style={{ display: 'block', marginTop: 4, fontSize: 14, lineHeight: 1.5 }}>
+                        Ask about your business, find a record, or learn how KiteLedger works.
+                    </Text>
                 </div>
+            </div>
 
-                <Title level={4} style={{ margin: 0 }}>
-                    What would you like to know?
-                </Title>
-
-                <Text type="secondary" style={{ fontSize: 13 }}>
-                    Ask about your figures, find a document, or learn how something works.
-                    Answers about live data are calculated from your ledger, not estimated.
-                </Text>
-            </Space>
-
-            <Row gutter={[12, 12]}>
-                {groups.map((group) => (
-                    <Col xs={24} sm={12} key={group.key}>
-                        <div
-                            style={{
-                                height: '100%',
-                                padding: 14,
-                                borderRadius: token.borderRadiusLG,
-                                border: `1px solid ${token.colorBorderSecondary}`,
-                                background: token.colorBgContainer,
-                            }}
-                        >
-                            <Space size={8} style={{ marginBottom: 10 }}>
-                                <span style={{ color: token.colorPrimary }}>{group.icon}</span>
-                                <Text strong style={{ fontSize: 13 }}>
-                                    {group.label}
-                                </Text>
-                            </Space>
-
-                            <Space direction="vertical" size={6} style={{ width: '100%' }}>
-                                {group.prompts.map((prompt) => (
-                                    <button
-                                        key={prompt}
-                                        type="button"
-                                        className="kl-prompt-card"
-                                        disabled={disabled}
-                                        onClick={() => onSelect?.(prompt)}
-                                        style={{
-                                            width: '100%',
-                                            textAlign: 'left',
-                                            // 44px minimum keeps the target
-                                            // comfortable on touch devices.
-                                            minHeight: 44,
-                                            padding: '9px 11px',
-                                            borderRadius: token.borderRadius,
-                                            border: `1px solid ${token.colorBorderSecondary}`,
-                                            background: token.colorFillQuaternary,
-                                            color: disabled ? token.colorTextDisabled : token.colorText,
-                                            font: 'inherit',
-                                            fontSize: 13,
-                                            lineHeight: 1.5,
-                                            cursor: disabled ? 'not-allowed' : 'pointer',
-                                        }}
-                                    >
-                                        {prompt}
-                                    </button>
-                                ))}
-                            </Space>
-                        </div>
-                    </Col>
-                ))}
-            </Row>
-
-            <Text
-                type="secondary"
-                style={{ fontSize: 11, display: 'block', textAlign: 'center', marginTop: 20 }}
-            >
-                <ShoppingOutlined style={{ marginRight: 4 }} />
-                {capabilities.writeProposals
-                    ? 'Copilot can prepare drafts for your approval. It never posts or approves anything on its own.'
-                    : 'Copilot is currently read-only. It never posts or approves accounting transactions.'}
+            <Text strong style={{ display: 'block', margin: '30px 0 10px', fontSize: 13 }}>
+                Try asking
             </Text>
+            <div
+                style={{
+                    display: 'grid',
+                    gridTemplateColumns: isMobile ? 'minmax(0, 1fr)' : 'repeat(2, minmax(0, 1fr))',
+                    gap: 8,
+                }}
+            >
+                {suggestions.map(({ prompt, label }) => (
+                    <button
+                        key={prompt}
+                        type="button"
+                        className="kl-prompt-card"
+                        disabled={disabled}
+                        onClick={() => onSelect?.(prompt)}
+                        style={{
+                            width: '100%',
+                            minHeight: 64,
+                            padding: '10px 12px',
+                            border: `1px solid ${token.colorBorderSecondary}`,
+                            borderRadius: 8,
+                            background: token.colorBgContainer,
+                            color: disabled ? token.colorTextDisabled : token.colorText,
+                            textAlign: 'left',
+                            font: 'inherit',
+                            cursor: disabled ? 'not-allowed' : 'pointer',
+                        }}
+                    >
+                        <Text type="secondary" style={{ display: 'block', fontSize: 11, lineHeight: 1.25 }}>
+                            {label}
+                        </Text>
+                        <span style={{ display: 'block', marginTop: 3, fontSize: 14, lineHeight: 1.4 }}>
+                            {prompt}
+                        </span>
+                    </button>
+                ))}
+            </div>
+
         </div>
     );
 }

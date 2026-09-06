@@ -56,7 +56,7 @@ class CopilotRouterTest extends TestCase
             {
             }
 
-            public function chat(): AIProviderInterface
+            public function chat(bool $interactive = false): AIProviderInterface
             {
                 return $this->fake;
             }
@@ -170,7 +170,7 @@ class CopilotRouterTest extends TestCase
 
         $this->assertSame(CopilotIntent::RecordLookup, $decision->intent);
         $this->assertSame('exact_pattern', $decision->decidedBy);
-        $this->assertContains('records.find', $decision->candidateTools);
+        $this->assertContains('records.search', $decision->candidateTools);
         $this->assertTrue($decision->requiresLiveData);
         $this->assertSame('INV-1004', $decision->filters['reference']);
     }
@@ -183,6 +183,22 @@ class CopilotRouterTest extends TestCase
 
         $this->assertSame(CopilotIntent::Greeting, $decision->intent);
         $this->assertFalse($decision->requiresLiveData);
+    }
+
+    public function test_layer_b_routes_pending_lead_counts_to_the_verified_metric_tool(): void
+    {
+        $router = $this->routerReturning($this->classification());
+
+        $decision = $router->route(
+            $this->makeRequest('How many pending leads do we have?'),
+            new CopilotTrace('t'),
+        );
+
+        $this->assertSame(CopilotIntent::MetricQuery, $decision->intent);
+        $this->assertSame('exact_pattern', $decision->decidedBy);
+        $this->assertSame('pending_leads', $decision->filters['metric']);
+        $this->assertContains('financial_metrics.query', $decision->candidateTools);
+        $this->assertTrue($decision->requiresLiveData);
     }
 
     // ---------- Layer C: real Neuron structured output ----------

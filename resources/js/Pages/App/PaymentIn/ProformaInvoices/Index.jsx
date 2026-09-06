@@ -974,13 +974,7 @@ export default function Index() {
     };
 
     return (
-        <AuthenticatedLayout
-            header={
-                <h2 className="text-xl font-semibold leading-tight text-gray-800">
-                    Payment-in Proforma Invoices
-                </h2>
-            }
-        >
+        <AuthenticatedLayout>
             <Head title="Payment-in Proforma Invoices" />
 
             <ReusableCrud
@@ -1017,12 +1011,6 @@ export default function Index() {
                         label: 'Draft',
                         title: 'Payment-in Proforma Invoices',
                         params: { approved: false },
-                    },
-                    {
-                        key: 'all',
-                        label: 'All',
-                        title: 'Payment-in Proforma Invoices',
-                        params: {},
                     },
                 ]}
                 defaultAnchorKey="approved"

@@ -21,11 +21,12 @@ import {
   Form,
   Input,
   InputNumber,
+  List,
   Modal,
   Row,
   Select,
   Space,
-  Statistic,
+  Steps,
   Table,
   Tabs,
   Tag,
@@ -632,8 +633,21 @@ function PayrollSettingsCrud() {
           options: [
             { value: 'working_days', label: 'Working Days' },
             { value: 'calendar_days', label: 'Calendar Days' },
+            { value: 'fixed_days', label: 'Fixed Number of Days' },
           ],
         },
+        {
+          name: 'standard_working_days_mode',
+          label: 'Working Days Policy',
+          type: 'select',
+          col: 12,
+          options: [
+            { value: 'working_days_only', label: 'Scheduled working days' },
+            { value: 'calendar_days', label: 'All calendar days' },
+            { value: 'fixed_30_days', label: 'Always 30 days' },
+          ],
+        },
+        { name: 'default_monthly_working_days', label: 'Fixed Monthly Days', type: 'number', col: 12, min: 1, max: 31 },
         {
           name: 'rounding_method',
           label: 'Rounding Method',
@@ -648,6 +662,12 @@ function PayrollSettingsCrud() {
         },
         { name: 'currency_precision', label: 'Currency Precision', type: 'number', col: 12, min: 0, max: 6 },
         { name: 'default_overtime_rate', label: 'Default Overtime Rate', type: 'number', col: 12, min: 0 },
+        { name: 'late_deduction_per_day', label: 'Late Deduction per Day', type: 'number', col: 12, min: 0 },
+        { name: 'overtime_enabled', label: 'Calculate Overtime', type: 'switch', col: 12 },
+        { name: 'late_deduction_enabled', label: 'Calculate Late Deductions', type: 'switch', col: 12 },
+        { name: 'unpaid_leave_deduction_enabled', label: 'Prorate Unpaid Leave', type: 'switch', col: 12 },
+        { name: 'require_approval_before_payment', label: 'Require Approval', type: 'switch', col: 12 },
+        { name: 'auto_post_journal_voucher', label: 'Post Journal After Approval', type: 'switch', col: 12 },
         { name: 'allow_multiple_runs', label: 'Allow Multiple Runs', type: 'switch', col: 12 },
         { name: 'active', label: 'Active', type: 'switch', col: 12 },
       ],
@@ -693,6 +713,14 @@ function PayrollSettingsCrud() {
     rounding_method: record?.rounding_method || 'nearest',
     currency_precision: record?.currency_precision ?? 2,
     default_overtime_rate: record?.default_overtime_rate ?? 0,
+    late_deduction_per_day: record?.late_deduction_per_day ?? 0,
+    standard_working_days_mode: record?.standard_working_days_mode || 'working_days_only',
+    default_monthly_working_days: record?.default_monthly_working_days ?? 30,
+    overtime_enabled: record?.overtime_enabled !== false,
+    late_deduction_enabled: Boolean(record?.late_deduction_enabled),
+    unpaid_leave_deduction_enabled: record?.unpaid_leave_deduction_enabled !== false,
+    require_approval_before_payment: record?.require_approval_before_payment !== false,
+    auto_post_journal_voucher: Boolean(record?.auto_post_journal_voucher),
     allow_multiple_runs: Boolean(record?.allow_multiple_runs),
     active: record?.active !== false,
   });
@@ -712,6 +740,7 @@ function PayrollSettingsCrud() {
 
     payload.currency_precision = Number(payload.currency_precision ?? 2);
     payload.default_overtime_rate = payload.default_overtime_rate ?? 0;
+    payload.late_deduction_per_day = payload.late_deduction_per_day ?? 0;
     payload.allow_multiple_runs = Boolean(payload.allow_multiple_runs);
     payload.active = payload.active !== false;
 
@@ -735,6 +764,14 @@ function PayrollSettingsCrud() {
         rounding_method: 'nearest',
         currency_precision: 2,
         default_overtime_rate: 0,
+        late_deduction_per_day: 0,
+        standard_working_days_mode: 'working_days_only',
+        default_monthly_working_days: 30,
+        overtime_enabled: true,
+        late_deduction_enabled: false,
+        unpaid_leave_deduction_enabled: true,
+        require_approval_before_payment: true,
+        auto_post_journal_voucher: false,
         allow_multiple_runs: false,
         active: true,
       }}
@@ -768,6 +805,7 @@ function PayrollWizard({ lookups, loadingLookups, onGenerated, onQuickAddPeriod 
   const [loading, setLoading] = useState(false);
   const [previewing, setPreviewing] = useState(false);
   const [previewResult, setPreviewResult] = useState(null);
+  const [previewSignature, setPreviewSignature] = useState(null);
 
   const employeeScope = Form.useWatch('employee_scope', form);
   const selectedPeriodId = Form.useWatch('payroll_period_id', form);
@@ -787,7 +825,28 @@ function PayrollWizard({ lookups, loadingLookups, onGenerated, onQuickAddPeriod 
   );
 
   const hasCurrencies = lookups.currencies?.some((currency) => currency.active !== false);
-  const canGenerate = Boolean(selectedPeriodId);
+  const canPreview = Boolean(selectedPeriodId);
+  const currentSignature = JSON.stringify({
+    payroll_period_id: selectedPeriodId || null,
+    branch_id: Form.useWatch('branch_id', form) || null,
+    currency_id: selectedCurrencyId || null,
+    exchange_rate: Form.useWatch('exchange_rate', form) || 1,
+    employee_scope: employeeScope || 'all',
+    department_id: Form.useWatch('department_id', form) || null,
+    employee_ids: Form.useWatch('employee_ids', form) || [],
+    source_account_id: selectedSourceAccountId || null,
+  });
+  const previewIsCurrent = previewSignature === currentSignature;
+  const blockers = [
+    ...(previewResult?.settings_checklist?.errors || []),
+    ...(previewResult?.accounting_readiness?.process?.errors || []),
+    ...(previewResult?.skipped_employees || []).flatMap((employee) =>
+      (employee.reasons || []).map((reason) => `${employee.employee_name}: ${reason}`),
+    ),
+  ];
+  const readyToGenerate = previewIsCurrent
+    && previewResult?.eligible_employee_count > 0
+    && blockers.length === 0;
 
   useEffect(() => {
     if (!lookups.currencies?.length) return;
@@ -830,6 +889,10 @@ function PayrollWizard({ lookups, loadingLookups, onGenerated, onQuickAddPeriod 
   };
 
   const generate = async () => {
+    if (!readyToGenerate) {
+      message.warning('Run the payroll check and resolve every blocker before generating payslips.');
+      return;
+    }
     const values = await form.validateFields();
 
     setLoading(true);
@@ -850,7 +913,7 @@ function PayrollWizard({ lookups, loadingLookups, onGenerated, onQuickAddPeriod 
         idempotency_key: `payroll-${values.payroll_period_id}-${values.branch_id || 'all'}-${Date.now()}`,
       };
 
-      await axios.post(api('/api/hrm/payroll/payrolls/generate'), payload);
+      const { data } = await axios.post(api('/api/hrm/payroll/payrolls/generate'), { ...payload, strict: true });
 
       message.success('Payroll generated. Review it in the Payrolls tab.');
 
@@ -874,7 +937,9 @@ function PayrollWizard({ lookups, loadingLookups, onGenerated, onQuickAddPeriod 
         });
       }
 
-      onGenerated?.();
+      setPreviewResult(null);
+      setPreviewSignature(null);
+      onGenerated?.(data);
     } catch (error) {
       message.error(apiErrorMessage(error, 'Payroll generation failed.'));
     } finally {
@@ -902,6 +967,7 @@ function PayrollWizard({ lookups, loadingLookups, onGenerated, onQuickAddPeriod 
       });
 
       setPreviewResult(data);
+      setPreviewSignature(currentSignature);
       message.success('Payroll preview is ready.');
     } catch (error) {
       message.error(apiErrorMessage(error, 'Unable to preview payroll.'));
@@ -932,8 +998,8 @@ function PayrollWizard({ lookups, loadingLookups, onGenerated, onQuickAddPeriod 
       <Alert
         showIcon
         type="info"
-        message="Before generating payroll"
-        description="Make sure employees have salary structure and attendance summary for the selected period. Missing employees are skipped by backend logic."
+        message="A quick check prevents payroll mistakes"
+        description="Choose who to pay, run Check payroll, fix anything shown in red, then generate. KiteLedger will not guess missing attendance or silently skip employees."
         style={{ marginBottom: 16 }}
       />
 
@@ -975,6 +1041,16 @@ function PayrollWizard({ lookups, loadingLookups, onGenerated, onQuickAddPeriod 
           exchange_rate: 1,
         }}
       >
+        <Steps
+          responsive
+          current={readyToGenerate ? 2 : previewResult && previewIsCurrent ? 1 : 0}
+          items={[
+            { title: 'Choose', description: 'Period and employees' },
+            { title: 'Check', description: 'Amounts and blockers' },
+            { title: 'Generate', description: 'Create payslips' },
+          ]}
+          style={{ marginBottom: 24 }}
+        />
         <Row gutter={12}>
           <Col xs={24} md={8}>
             <Form.Item label="Payroll Period" required>
@@ -1064,8 +1140,8 @@ function PayrollWizard({ lookups, loadingLookups, onGenerated, onQuickAddPeriod 
           <Col xs={24} md={10}>
             <Form.Item
               name="source_account_id"
-              label="Payment From Account"
-              rules={[{ required: true, message: 'Select a payment account before generating payroll.' }]}
+              label="Payment Account (optional now)"
+              extra="You can choose this later when recording payment."
             >
               <Select
                 allowClear
@@ -1204,22 +1280,22 @@ function PayrollWizard({ lookups, loadingLookups, onGenerated, onQuickAddPeriod 
 
         <Space wrap>
           <Button
+            type="primary"
             onClick={preview}
             loading={previewing}
-            disabled={!canGenerate}
-            icon={<InfoCircleOutlined />}
+            disabled={!canPreview}
+            icon={<AuditOutlined />}
           >
-            Preview
+            Check payroll
           </Button>
 
           <Button
-            type="primary"
             onClick={generate}
             loading={loading}
-            disabled={!canGenerate}
-            icon={<CalculatorOutlined />}
+            disabled={!readyToGenerate}
+            icon={<FileDoneOutlined />}
           >
-            Generate Payroll
+            Generate {previewResult?.eligible_employee_count || ''} Payslips
           </Button>
 
           <Button
@@ -1238,6 +1314,8 @@ function PayrollWizard({ lookups, loadingLookups, onGenerated, onQuickAddPeriod 
                 exchange_rate: Number(defaultCurrency?.exchange_rate || 1),
                 currency_id: defaultCurrency?.id,
               });
+              setPreviewResult(null);
+              setPreviewSignature(null);
             }}
           >
             Reset
@@ -1245,13 +1323,47 @@ function PayrollWizard({ lookups, loadingLookups, onGenerated, onQuickAddPeriod 
         </Space>
 
         {previewResult ? (
-          <Alert
-            showIcon
-            type={previewResult.settings_checklist?.ready ? 'success' : 'warning'}
-            message={`${previewResult.eligible_employee_count || 0} employees ready for payroll`}
-            description={`${previewResult.skipped_employee_count || 0} skipped. Net payable: ${money(previewResult.totals?.net_payable)}.`}
-            style={{ marginTop: 16 }}
-          />
+          <Card
+            className="payroll-check-card"
+            style={{ marginTop: 20, borderColor: blockers.length ? token.colorErrorBorder : token.colorSuccessBorder }}
+            title={<Space><CheckCircleOutlined />Payroll check</Space>}
+          >
+            {!previewIsCurrent ? (
+              <Alert showIcon type="warning" message="Selections changed" description="Run Check payroll again so the amounts below match your latest choices." />
+            ) : blockers.length ? (
+              <Alert
+                showIcon
+                type="error"
+                message={`${blockers.length} item${blockers.length === 1 ? '' : 's'} must be fixed`}
+                description={<List size="small" dataSource={blockers} renderItem={(item) => <List.Item><Text>{item}</Text></List.Item>} />}
+              />
+            ) : (
+              <Alert showIcon type="success" message="Everything is ready" description="Review the employee amounts below, then generate the payslips." />
+            )}
+
+            <Row gutter={[12, 12]} style={{ marginTop: 16 }}>
+              <Col xs={12} md={6}><MetricCard title="Ready employees" value={previewResult.eligible_employee_count || 0} icon={<TeamOutlined />} tone="info" /></Col>
+              <Col xs={12} md={6}><MetricCard title="Gross earnings" value={previewResult.totals?.gross_earnings || 0} icon={<DollarOutlined />} tone="success" /></Col>
+              <Col xs={12} md={6}><MetricCard title="Deductions" value={previewResult.totals?.total_deductions || 0} icon={<AuditOutlined />} tone="warning" /></Col>
+              <Col xs={12} md={6}><MetricCard title="Net to pay" value={previewResult.totals?.net_payable || 0} icon={<WalletOutlined />} /></Col>
+            </Row>
+
+            <Table
+              style={{ marginTop: 16 }}
+              size="small"
+              rowKey="employee_id"
+              dataSource={previewResult.eligible_employees || []}
+              pagination={{ pageSize: 8, hideOnSinglePage: true }}
+              scroll={{ x: 760 }}
+              columns={[
+                { title: 'Employee', dataIndex: 'employee_name', render: (value) => <Text strong>{value}</Text> },
+                { title: 'Payable days', dataIndex: 'payable_days', align: 'right' },
+                { title: 'Gross', dataIndex: 'gross_earnings', align: 'right', render: money },
+                { title: 'Deductions', dataIndex: 'total_deductions', align: 'right', render: money },
+                { title: 'Net pay', dataIndex: 'net_payable', align: 'right', render: (value) => <Text strong>{money(value)}</Text> },
+              ]}
+            />
+          </Card>
         ) : null}
       </Form>
     </Card>
@@ -1414,19 +1526,22 @@ export default function Payroll({ auth }) {
   const [payslipDrawer, setPayslipDrawer] = useState(null);
   const [voidingPayroll, setVoidingPayroll] = useState(null);
   const [voidReason, setVoidReason] = useState('');
+  const [paymentModal, setPaymentModal] = useState(null);
+  const [paying, setPaying] = useState(false);
   const [periodModal, setPeriodModal] = useState({ open: false, record: null });
   const [periodSaving, setPeriodSaving] = useState(false);
   const [sourceAccountId, setSourceAccountId] = useState(null);
+  const [activeTab, setActiveTab] = useState('payrolls');
 
   const [form] = Form.useForm();
   const [lineForm] = Form.useForm();
   const [periodForm] = Form.useForm();
+  const [paymentForm] = Form.useForm();
 
   const editable = ['draft', 'generated'].includes(selectedPayroll?.status);
 
   const pageStyles = {
     shell: {
-      padding: 16,
       minHeight: 'calc(100vh - 64px)',
       background: token.colorBgLayout,
     },
@@ -1438,13 +1553,6 @@ export default function Payroll({ auth }) {
     },
     headerInner: { padding: 18 },
     headerMeta: { color: token.colorTextSecondary, marginTop: 4, maxWidth: 760 },
-    quickStat: {
-      padding: '10px 12px',
-      border: `1px solid ${token.colorBorderSecondary}`,
-      borderRadius: token.borderRadius,
-      background: token.colorFillQuaternary,
-      minWidth: 124,
-    },
     sectionCard: {
       borderRadius: token.borderRadiusLG,
       boxShadow: token.boxShadowTertiary,
@@ -1452,16 +1560,6 @@ export default function Payroll({ auth }) {
   };
 
   const payrollRows = dashboard?.recent_payrolls || dashboard?.recent_runs || [];
-
-  const statusCounts = useMemo(() => {
-    const seed = { generated: 0, approved: 0, processed: 0, paid: 0 };
-
-    payrollRows.forEach((row) => {
-      if (Object.prototype.hasOwnProperty.call(seed, row.status)) seed[row.status] += 1;
-    });
-
-    return seed;
-  }, [payrollRows]);
 
   const selectedEmployeeOptions = useMemo(
     () =>
@@ -1555,6 +1653,12 @@ export default function Payroll({ auth }) {
     setDrawerOpen(true);
     setSelectedPayroll(payroll);
     await refreshSelected(payroll.id);
+  };
+
+  const handlePayrollGenerated = async (payroll) => {
+    await refreshAll();
+    setActiveTab('payrolls');
+    if (payroll?.id) await openPayroll(payroll);
   };
 
   const syncPayrollAccounts = async () => {
@@ -1668,16 +1772,6 @@ export default function Payroll({ auth }) {
 
     if (runningAction) return;
 
-    if (action === 'process' && !payroll.source_account_id) {
-      message.error('Select and save Payment From Account before processing payroll.');
-      return;
-    }
-
-    if (action === 'mark-paid' && !payroll.source_account_id) {
-      message.error('Payment From Account is missing.');
-      return;
-    }
-
     modal.confirm({
       title: `${label} payroll?`,
       content: `${payroll.payroll_number || payroll.run_number} will move to ${label.toLowerCase()}.`,
@@ -1701,6 +1795,36 @@ export default function Payroll({ auth }) {
   };
 
   const isActionRunning = (payroll, action) => runningAction === `${payroll?.id}:${action}`;
+
+  const openPaymentModal = (payroll) => {
+    setPaymentModal(payroll);
+    paymentForm.setFieldsValue({
+      source_account_id: payroll.source_account_id || payroll.source_account?.id || null,
+      payment_date: dayjs(),
+      payment_reference: '',
+    });
+  };
+
+  const submitPayment = async () => {
+    const values = await paymentForm.validateFields();
+    const payroll = paymentModal;
+    setPaying(true);
+    try {
+      await axios.post(api(`/api/hrm/payroll/payrolls/${payroll.id}/mark-paid`), {
+        ...values,
+        payment_date: values.payment_date.format('YYYY-MM-DD'),
+      });
+      message.success('Salaries marked paid and payment journal posted.');
+      setPaymentModal(null);
+      paymentForm.resetFields();
+      await loadDashboard();
+      await refreshSelected(payroll.id);
+    } catch (error) {
+      message.error(apiErrorMessage(error, 'Unable to record payroll payment.'));
+    } finally {
+      setPaying(false);
+    }
+  };
 
   const saveAdjustment = async () => {
     const values = await form.validateFields();
@@ -1816,10 +1940,10 @@ export default function Payroll({ auth }) {
             <Button size="small" type="primary" loading={isActionRunning(record, 'approve')} disabled={!!runningAction} onClick={() => act(record, 'approve', 'Approve')}>Approve</Button>
           )}
           {record.status === 'approved' && (
-            <Button size="small" type="primary" loading={isActionRunning(record, 'process')} disabled={!!runningAction} onClick={() => act(record, 'process', 'Process')}>Process</Button>
+            <Button size="small" type="primary" loading={isActionRunning(record, 'process')} disabled={!!runningAction} onClick={() => act(record, 'process', 'Post to Accounting')}>Post to Accounting</Button>
           )}
           {record.status === 'processed' && (
-            <Button size="small" loading={isActionRunning(record, 'mark-paid')} disabled={!!runningAction} onClick={() => act(record, 'mark-paid', 'Mark Paid')}>Mark Paid</Button>
+            <Button size="small" onClick={() => openPaymentModal(record)}>Record Payment</Button>
           )}
           {['generated', 'approved'].includes(record.status) && (
             <Button size="small" danger disabled={!!runningAction} onClick={() => setVoidingPayroll(record)}>Void</Button>
@@ -1877,33 +2001,21 @@ export default function Payroll({ auth }) {
     <AuthenticatedLayout auth={auth}>
       <Head title="Payroll" />
 
-      <div style={pageStyles.shell}>
-        <Space direction="vertical" size={16} style={{ display: 'flex' }}>
-          <Card bordered={false} style={pageStyles.header} bodyStyle={pageStyles.headerInner}>
+      <div className="payroll-page" style={pageStyles.shell}>
+          <Card className="payroll-page__header" bordered={false} style={pageStyles.header} bodyStyle={pageStyles.headerInner}>
             <Row align="middle" gutter={[16, 16]}>
               <Col flex="auto">
                 <Space direction="vertical" size={2}>
                   <Title level={3} style={{ margin: 0 }}>Payroll</Title>
-                  <Text style={pageStyles.headerMeta}>
-                    {dashboard?.current_period
-                      ? `Current payroll period: ${periodLabel(dashboard.current_period)} (${dashboard.current_period.status || 'open'}). Generate payroll, review payslips, post journals, and settle salaries.`
-                      : 'No open payroll period is selected yet. Create a period, preview employees, then generate payroll.'}
-                  </Text>
+                  <Text style={pageStyles.headerMeta}>Create, review, approve, and settle employee payroll in one register.</Text>
+                  {dashboard?.current_period ? (
+                    <Text type="secondary" className="payroll-page__period">Current period: <strong>{periodLabel(dashboard.current_period)}</strong> · {dashboard.current_period.status || 'open'}</Text>
+                  ) : null}
                 </Space>
               </Col>
 
               <Col>
                 <Space wrap>
-                  {Object.entries(statusCounts).map(([status, count]) => (
-                    <div key={status} style={pageStyles.quickStat}>
-                      <Text type="secondary" style={{ display: 'block', textTransform: 'capitalize' }}>{status}</Text>
-                      <Space size={6}>
-                        <Tag color={statusColor[status]}>{count}</Tag>
-                        <Text strong>{count === 1 ? 'payroll' : 'payrolls'}</Text>
-                      </Space>
-                    </div>
-                  ))}
-
                   <Button icon={<PlusOutlined />} onClick={() => openPeriodModal()}>
                     Add Period
                   </Button>
@@ -1920,32 +2032,19 @@ export default function Payroll({ auth }) {
             </Row>
           </Card>
 
-          <Row gutter={[12, 12]}>
-            <Col xs={24} sm={12} xl={6}>
-              <MetricCard title="Employees" value={dashboard?.employees_included || 0} helper="Across payroll runs" icon={<TeamOutlined />} tone="info" />
-            </Col>
-            <Col xs={24} sm={12} xl={6}>
-              <MetricCard title="Gross Payroll" value={dashboard?.gross_payroll || 0} helper="Before deductions" icon={<DollarOutlined />} tone="success" />
-            </Col>
-            <Col xs={24} sm={12} xl={6}>
-              <MetricCard title="Deductions" value={dashboard?.total_deductions || 0} helper="Tax, benefits, and deductions" icon={<AuditOutlined />} tone="warning" />
-            </Col>
-            <Col xs={24} sm={12} xl={6}>
-              <MetricCard title="Net Payable" value={dashboard?.net_payable || 0} helper={`Paid ${money(dashboard?.paid_amount)} / Unpaid ${money(dashboard?.unpaid_amount)}`} icon={<BankOutlined />} tone="default" />
-            </Col>
-          </Row>
-
           <Tabs
+            className="payroll-page__tabs"
+            activeKey={activeTab}
+            onChange={setActiveTab}
             items={[
               {
                 key: 'generate',
                 label: 'Create Payroll',
-                icon: <PlusOutlined />,
                 children: (
                   <PayrollWizard
                     lookups={lookups}
                     loadingLookups={lookupLoading}
-                    onGenerated={refreshAll}
+                    onGenerated={handlePayrollGenerated}
                     onQuickAddPeriod={() => openPeriodModal()}
                   />
                 ),
@@ -1953,7 +2052,6 @@ export default function Payroll({ auth }) {
               {
                 key: 'payrolls',
                 label: 'Payrolls',
-                icon: <CheckCircleOutlined />,
                 children: (
                   <Card
                     bordered={false}
@@ -1977,7 +2075,6 @@ export default function Payroll({ auth }) {
               {
                 key: 'periods',
                 label: 'Periods',
-                icon: <FileDoneOutlined />,
                 children: (
                   <PayrollPeriodsPanel
                     periods={lookups.periods}
@@ -1990,11 +2087,10 @@ export default function Payroll({ auth }) {
                   />
                 ),
               },
-              { key: 'components', label: 'Components', icon: <SettingOutlined />, children: <SalaryComponentsCrud /> },
-              { key: 'settings', label: 'Settings', icon: <SettingOutlined />, children: <PayrollSettingsCrud /> },
+              { key: 'components', label: 'Components', children: <SalaryComponentsCrud /> },
+              { key: 'settings', label: 'Settings', children: <PayrollSettingsCrud /> },
             ]}
           />
-        </Space>
       </div>
 
       <Drawer
@@ -2016,10 +2112,10 @@ export default function Payroll({ auth }) {
                 <Button type="primary" loading={isActionRunning(selectedPayroll, 'approve')} disabled={!!runningAction} onClick={() => act(selectedPayroll, 'approve', 'Approve')}>Approve</Button>
               )}
               {selectedPayroll.status === 'approved' && (
-                <Button type="primary" loading={isActionRunning(selectedPayroll, 'process')} disabled={!!runningAction} onClick={() => act(selectedPayroll, 'process', 'Process')}>Process</Button>
+                <Button type="primary" loading={isActionRunning(selectedPayroll, 'process')} disabled={!!runningAction} onClick={() => act(selectedPayroll, 'process', 'Post to Accounting')}>Post to Accounting</Button>
               )}
               {selectedPayroll.status === 'processed' && (
-                <Button loading={isActionRunning(selectedPayroll, 'mark-paid')} disabled={!!runningAction} onClick={() => act(selectedPayroll, 'mark-paid', 'Mark Paid')}>Mark Paid</Button>
+                <Button type="primary" onClick={() => openPaymentModal(selectedPayroll)}>Record Payment</Button>
               )}
               {selectedPayroll.status === 'paid' && (
                 <Button loading={isActionRunning(selectedPayroll, 'lock')} disabled={!!runningAction} onClick={() => act(selectedPayroll, 'lock', 'Lock')}>Lock</Button>
@@ -2033,6 +2129,34 @@ export default function Payroll({ auth }) {
       >
         {selectedPayroll ? (
           <Space direction="vertical" size={12} style={{ display: 'flex' }}>
+            <Card size="small" className="payroll-progress-card">
+              <Steps
+                size="small"
+                current={{ generated: 0, approved: 1, processed: 2, paid: 3, locked: 4 }[selectedPayroll.status] ?? 0}
+                status={['void', 'voided'].includes(selectedPayroll.status) ? 'error' : 'process'}
+                items={[
+                  { title: 'Review' },
+                  { title: 'Approved' },
+                  { title: 'Posted' },
+                  { title: 'Paid' },
+                  { title: 'Locked' },
+                ]}
+              />
+              <Alert
+                style={{ marginTop: 14 }}
+                showIcon
+                type={['void', 'voided'].includes(selectedPayroll.status) ? 'error' : selectedPayroll.status === 'generated' ? 'info' : 'success'}
+                message={{
+                  generated: 'Review employee amounts, then approve',
+                  approved: 'Approval complete — post the payroll journal next',
+                  processed: 'Accounting is posted — record the salary payment next',
+                  paid: 'Payment recorded — lock payroll when review is complete',
+                  locked: 'Payroll is complete and locked',
+                  void: 'This payroll was voided',
+                  voided: 'This payroll was voided',
+                }[selectedPayroll.status] || 'Review this payroll'}
+              />
+            </Card>
             <Descriptions size="small" bordered column={{ xs: 1, sm: 2, lg: 4 }}>
               <Descriptions.Item label="Payroll Period">{periodLabel(selectedPayroll.payroll_period)}</Descriptions.Item>
               <Descriptions.Item label="Branch">{selectedPayroll.branch?.name || '-'}</Descriptions.Item>
@@ -2043,6 +2167,10 @@ export default function Payroll({ auth }) {
               <Descriptions.Item label="Created">{formatDateTime(selectedPayroll.created_at)}</Descriptions.Item>
               <Descriptions.Item label="Generated">{formatDateTime(selectedPayroll.generated_at)}</Descriptions.Item>
               <Descriptions.Item label="Approved">{formatDateTime(selectedPayroll.approved_at)}</Descriptions.Item>
+              <Descriptions.Item label="Employees">{selectedPayroll.total_employees || 0}</Descriptions.Item>
+              <Descriptions.Item label="Earnings">{money(selectedPayroll.total_earnings)}</Descriptions.Item>
+              <Descriptions.Item label="Deductions">{money(selectedPayroll.total_deductions)}</Descriptions.Item>
+              <Descriptions.Item label="Net Payable">{money(selectedPayroll.total_net_payable)}</Descriptions.Item>
               <Descriptions.Item label="Processed">{formatDateTime(selectedPayroll.processed_at)}</Descriptions.Item>
               <Descriptions.Item label="Paid">{formatDateTime(selectedPayroll.paid_at)}</Descriptions.Item>
               <Descriptions.Item label="Updated">{formatDateTime(selectedPayroll.updated_at)}</Descriptions.Item>
@@ -2077,18 +2205,11 @@ export default function Payroll({ auth }) {
                     >
                       Save Account
                     </Button>
-                    {!selectedPayroll.source_account_id ? <Tag color="warning">Required before processing</Tag> : <Tag color="green">Ready</Tag>}
+                    {!selectedPayroll.source_account_id ? <Tag color="warning">Choose before payment</Tag> : <Tag color="green">Payment ready</Tag>}
                   </Space>
                 </Col>
               </Row>
             </Card>
-
-            <Row gutter={[12, 12]}>
-              <Col xs={12} sm={6}><Statistic title="Employees" value={selectedPayroll.total_employees || 0} /></Col>
-              <Col xs={12} sm={6}><Statistic title="Earnings" value={money(selectedPayroll.total_earnings)} /></Col>
-              <Col xs={12} sm={6}><Statistic title="Deductions" value={money(selectedPayroll.total_deductions)} /></Col>
-              <Col xs={12} sm={6}><Statistic title="Net Payable" value={money(selectedPayroll.total_net_payable)} valueStyle={{ color: token.colorPrimary }} /></Col>
-            </Row>
 
             <Table
               rowKey="id"
@@ -2136,7 +2257,7 @@ export default function Payroll({ auth }) {
       >
         <Form form={form} layout="vertical" initialValues={{ calculation_type: 'fixed', applicability_type: 'all_employees' }}>
           <Form.Item name="name" label="Name" rules={[{ required: true, message: 'Name is required.' }]}><Input /></Form.Item>
-          <Form.Item name="component_id" label="Component">
+          <Form.Item name="component_id" label="Component" rules={adjustmentModal === 'deduction' ? [{ required: true, message: 'Choose the deduction component and payable account.' }] : []}>
             <Select allowClear showSearch optionFilterProp="label" options={lookups.components.map((component) => ({ value: component.id, label: component.name }))} />
           </Form.Item>
           <Row gutter={12}>
@@ -2273,6 +2394,19 @@ export default function Payroll({ auth }) {
                   <Col xs={24} md={8}>
                     <Form.Item name="name" label="Name" rules={[{ required: true, message: 'Name is required.' }]}><Input /></Form.Item>
                   </Col>
+                  <Col xs={24} md={8}>
+                    <Form.Item noStyle shouldUpdate={(previous, next) => previous.type !== next.type}>
+                      {({ getFieldValue }) => (
+                        <Form.Item
+                          name="component_id"
+                          label="Payroll Component"
+                          rules={getFieldValue('type') === 'deduction' ? [{ required: true, message: 'Choose a mapped deduction component.' }] : []}
+                        >
+                          <Select allowClear showSearch optionFilterProp="label" options={lookups.components.map((component) => ({ value: component.id, label: component.name }))} />
+                        </Form.Item>
+                      )}
+                    </Form.Item>
+                  </Col>
                   <Col xs={24} md={5}>
                     <Form.Item name="amount" label="Amount" rules={[{ required: true, message: 'Amount is required.' }]}>
                       <InputNumber min={0.01} precision={2} style={{ width: '100%' }} />
@@ -2295,6 +2429,51 @@ export default function Payroll({ auth }) {
           </Space>
         ) : null}
       </Drawer>
+
+      <Modal
+        title="Record salary payment"
+        open={Boolean(paymentModal)}
+        onCancel={() => {
+          setPaymentModal(null);
+          paymentForm.resetFields();
+        }}
+        onOk={submitPayment}
+        confirmLoading={paying}
+        okText="Post Payment"
+      >
+        <Alert
+          showIcon
+          type="info"
+          message={`Pay ${paymentModal?.total_employees || 0} employees — ${money(paymentModal?.total_net_payable)}`}
+          description="This posts the payment journal, clears each employee payable balance, and creates a payment record for every payslip."
+          style={{ marginBottom: 16 }}
+        />
+        <Form form={paymentForm} layout="vertical">
+          <Form.Item name="source_account_id" label="Paid From" rules={[{ required: true, message: 'Choose the cash or bank account used.' }]}>
+            <Select
+              showSearch
+              optionFilterProp="label"
+              placeholder="Choose cash or bank account"
+              options={lookups.paymentAccounts.map((account) => ({
+                value: account.id,
+                label: `${account.code ? `${account.code} - ` : ''}${account.name}`,
+              }))}
+            />
+          </Form.Item>
+          <Row gutter={12}>
+            <Col span={12}>
+              <Form.Item name="payment_date" label="Payment Date" rules={[{ required: true, message: 'Choose the payment date.' }]}>
+                <DatePicker style={{ width: '100%' }} />
+              </Form.Item>
+            </Col>
+            <Col span={12}>
+              <Form.Item name="payment_reference" label="Reference">
+                <Input placeholder="Bank reference, batch ID, etc." />
+              </Form.Item>
+            </Col>
+          </Row>
+        </Form>
+      </Modal>
 
       <Modal
         title="Void payroll"

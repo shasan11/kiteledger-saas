@@ -959,67 +959,6 @@ export default function LeaveApplications({ auth }) {
         }}
       >
         <Space direction="vertical" size={token.marginMD} style={{ display: 'flex' }}>
-          {overviewLoading ? (
-            <Skeleton active paragraph={{ rows: 2 }} />
-          ) : (
-            <Row gutter={[12, 12]}>
-              <Col xs={24} sm={12} md={8} xl={4}>
-                <SummaryCard
-                  title="Total Requests"
-                  value={overview?.total || 0}
-                  tone="blue"
-                  icon={<TeamOutlined />}
-                />
-              </Col>
-
-              <Col xs={24} sm={12} md={8} xl={4}>
-                <SummaryCard
-                  title="Pending"
-                  value={overview?.pending || 0}
-                  tone="gold"
-                  icon={<ClockCircleOutlined />}
-                />
-              </Col>
-
-              <Col xs={24} sm={12} md={8} xl={4}>
-                <SummaryCard
-                  title="Approved"
-                  value={overview?.approved || 0}
-                  tone="green"
-                  icon={<CheckCircleOutlined />}
-                />
-              </Col>
-
-              <Col xs={24} sm={12} md={8} xl={4}>
-                <SummaryCard
-                  title="Rejected"
-                  value={overview?.rejected || 0}
-                  tone="red"
-                  icon={<StopOutlined />}
-                />
-              </Col>
-
-              <Col xs={24} sm={12} md={8} xl={4}>
-                <SummaryCard
-                  title="Upcoming Days"
-                  value={overview?.upcomingDays || 0}
-                  suffix="days"
-                  tone="purple"
-                  icon={<CalendarOutlined />}
-                />
-              </Col>
-
-              <Col xs={24} sm={12} md={8} xl={4}>
-                <SummaryCard
-                  title="Status"
-                  value="Live"
-                  tone="default"
-                  icon={<SyncOutlined />}
-                />
-              </Col>
-            </Row>
-          )}
-
           <ReusableCrud
             title="Leave Applications"
             icon={<FormOutlined />}

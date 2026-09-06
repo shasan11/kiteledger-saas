@@ -18,7 +18,6 @@ class RecoveryController extends Controller
         abort_if(InstalledState::isInstalled(), 404);
 
         return view('vendor.installer.recover', [
-            'problems' => InstalledState::recoveryProblems(),
             'hasStaleConfigCache' => is_file(base_path('bootstrap/cache/config.php')),
             'resetAllowed' => true,
         ]);

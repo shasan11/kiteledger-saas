@@ -73,6 +73,7 @@ class PayrollAccountSyncService
     {
         $existing = ChartOfAccount::query()
             ->where('account_id', $account->id)
+            ->where(fn ($query) => $query->whereNull('branch_id')->orWhere('branch_id', $employee->branch_id))
             ->first();
 
         if ($existing) {

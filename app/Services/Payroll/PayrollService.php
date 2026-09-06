@@ -10,11 +10,13 @@ use App\Models\Currency;
 use App\Models\EmployeeAddition;
 use App\Models\EmployeeDeduction;
 use App\Models\EmployeeReimbursement;
+use App\Models\FiscalYear;
 use App\Models\JournalVoucher;
 use App\Models\Payroll;
 use App\Models\PayrollAddition;
 use App\Models\PayrollDeduction;
 use App\Models\PayrollPeriod;
+use App\Models\PayrollPayment;
 use App\Models\PayrollSetting;
 use App\Models\Payslip;
 use App\Models\PayslipLine;
@@ -60,7 +62,7 @@ class PayrollService
         ];
 
         foreach ($selected as $employee) {
-            $prepared = $this->prepareEmployeeCalculation($employee, $period, $settings, $strictAttendanceLock);
+            $prepared = $this->prepareEmployeeCalculation($employee, $period, $settings, $strictAttendanceLock, $options);
 
             if ($prepared['reasons']) {
                 $skipped[] = [
@@ -111,7 +113,7 @@ class PayrollService
             'skipped_employee_count' => count($skipped),
             'eligible_employees' => $eligible,
             'skipped_employees' => $skipped,
-            'totals' => array_map(fn ($amount) => round($amount, 2), $totals),
+            'totals' => array_map(fn ($amount) => round($amount, (int) $settings->currency_precision), $totals),
             'settings_checklist' => [
                 'ready' => empty($settingsErrors),
                 'errors' => $settingsErrors,
@@ -160,6 +162,7 @@ class PayrollService
             }
 
             $settings = $this->settings($branchId);
+            $fiscalYearId = $this->fiscalYearForDate($period->end_date)?->id;
 
             if (! $settings->allow_multiple_runs) {
                 $existing = Payroll::query()
@@ -186,6 +189,7 @@ class PayrollService
                 'payroll_number' => $number,
                 'run_number' => $number,
                 'status' => 'draft',
+                'fiscal_year_id' => $fiscalYearId,
                 'currency_id' => $options['currency_id'] ?? $settings->currency_id,
                 'exchange_rate' => $options['exchange_rate'] ?? 1,
                 'source_account_id' => $options['source_account_id'] ?? null,
@@ -194,7 +198,13 @@ class PayrollService
             ]);
 
             if (isset($payroll) && $payroll->exists) {
-                $payroll->forceFill(['preview_snapshot' => $preview])->save();
+                $payroll->forceFill([
+                    'preview_snapshot' => $preview,
+                    'fiscal_year_id' => $fiscalYearId,
+                    'currency_id' => $options['currency_id'] ?? $settings->currency_id,
+                    'exchange_rate' => $options['exchange_rate'] ?? 1,
+                    'source_account_id' => $options['source_account_id'] ?? $payroll->source_account_id,
+                ])->save();
             }
 
             $employees = User::query()
@@ -204,7 +214,7 @@ class PayrollService
                 ->get();
 
             foreach ($employees as $employee) {
-                $prepared = $this->prepareEmployeeCalculation($employee, $period, $settings, false);
+                $prepared = $this->prepareEmployeeCalculation($employee, $period, $settings, false, $options);
                 $structure = $prepared['structure'];
                 $attendance = $prepared['attendance'];
                 $calculation = $prepared['calculation'];
@@ -218,6 +228,7 @@ class PayrollService
                     'employee_id' => $employee->id,
                     'user_id' => $employee->id,
                     'branch_id' => $branchId ?: $employee->branch_id,
+                    'fiscal_year_id' => $fiscalYearId,
                     'payslip_number' => $this->payslipNumber($period, $employee),
                     'status' => 'generated',
                     'salary_month' => $period->month,
@@ -252,6 +263,7 @@ class PayrollService
                     'unpaid_leave_days' => $calculation['unpaid_leave_days'],
                     'overtime_hours' => $calculation['overtime_hours'],
                     'remarks' => null,
+                    'payment_reference' => $options['payment_reference'] ?? null,
                 ]);
 
                 $payslip->lines()->createMany($calculation['lines']);
@@ -341,6 +353,11 @@ class PayrollService
                 'base_currency_amount' => $this->baseAmount($data['amount'], $payslip->exchange_rate),
                 'calculation_type' => $data['calculation_type'],
                 'source' => $data['source'],
+                'meta' => [
+                    'affects_net_salary' => $data['component_id']
+                        ? (bool) SalaryComponent::query()->whereKey($data['component_id'])->value('affects_net_salary')
+                        : true,
+                ],
                 'remarks' => $data['remarks'] ?? null,
             ]);
 
@@ -374,11 +391,11 @@ class PayrollService
         });
     }
 
-    public function transition(Payroll $payroll, string $toStatus, string $action, User $actor, ?string $reason = null): Payroll
+    public function transition(Payroll $payroll, string $toStatus, string $action, User $actor, ?string $reason = null, array $context = []): Payroll
     {
         $allowed = [
             'draft' => ['generated', 'voided'],
-            'generated' => ['approved', 'reopened', 'voided'],
+            'generated' => ['approved', 'processed', 'reopened', 'voided'],
             'approved' => ['processed', 'reopened', 'voided'],
             'processed' => ['paid', 'reopened', 'voided'],
             'paid' => ['locked'],
@@ -393,22 +410,35 @@ class PayrollService
         }
 
         if (in_array($toStatus, ['void', 'voided', 'reopened'], true) && ! $reason) {
-            abort(422, 'Void reason is required.');
+            abort(422, 'A reason is required.');
         }
 
-        return DB::transaction(function () use ($payroll, $toStatus, $action, $actor, $reason) {
+        return DB::transaction(function () use ($payroll, $toStatus, $action, $actor, $reason, $context, $allowed) {
             $payroll = Payroll::query()->lockForUpdate()->findOrFail($payroll->id);
             $from = $payroll->status;
+
+            if (! in_array($toStatus, $allowed[$from] ?? [], true)) {
+                abort(422, "Payroll changed while this action was running. Refresh and try again from {$from}.");
+            }
+
+            $autoProcessed = false;
 
             if ($toStatus === 'approved') {
                 $this->assertHasPayslips($payroll);
                 $payroll->update(['status' => 'approved', 'approved_by' => $actor->id, 'approved_at' => now()]);
                 $payroll->payslips()->update(['status' => 'approved']);
                 $this->lockAttendance($payroll, $actor);
+                $this->log($payroll, $from, 'approved', $action, $reason, $actor);
+
+                if ($this->settings($payroll->branch_id)->auto_post_journal_voucher) {
+                    $this->process($payroll->fresh(), $actor);
+                    $autoProcessed = true;
+                    $this->log($payroll, 'approved', 'processed', 'auto_post', 'Automatically posted after approval.', $actor);
+                }
             } elseif ($toStatus === 'processed') {
                 $this->process($payroll, $actor);
             } elseif ($toStatus === 'paid') {
-                $this->pay($payroll, $actor);
+                $this->pay($payroll, $actor, $context);
             } elseif ($toStatus === 'locked') {
                 $payroll->update(['status' => 'locked', 'locked_by' => $actor->id, 'locked_at' => now()]);
                 $payroll->payslips()->update(['status' => 'locked']);
@@ -428,15 +458,20 @@ class PayrollService
                 $this->unlockAttendance($payroll, $actor);
             }
 
-            $this->log($payroll, $from, $toStatus, $action, $reason, $actor);
+            if ($toStatus !== 'approved') {
+                $this->log($payroll, $from, $toStatus, $action, $reason, $actor);
+            }
 
-            return $this->loadPayroll($payroll);
+            return $this->loadPayroll($autoProcessed ? $payroll->fresh() : $payroll);
         });
     }
 
     public function process(Payroll $payroll, User $actor): JournalVoucher
     {
         $this->assertReadyToProcess($payroll);
+        if ($payroll->status === 'generated') {
+            $this->lockAttendance($payroll, $actor);
+        }
         $voucher = $this->generateAccrualJournalVoucher($payroll, $actor);
 
         $payroll->update([
@@ -476,14 +511,15 @@ class PayrollService
                 return $existingVoucher->fresh('items.account');
             }
 
-            if (! in_array($payroll->status, ['approved', 'processed'], true)) {
-                abort(422, 'Journal voucher can only be generated for an approved payroll.');
+            $settings = $this->settings($payroll->branch_id);
+            $canPostWithoutApproval = $payroll->status === 'generated' && ! $settings->require_approval_before_payment;
+            if (! in_array($payroll->status, ['approved', 'processed'], true) && ! $canPostWithoutApproval) {
+                abort(422, 'Journal voucher can only be generated after payroll approval.');
             }
 
             $this->syncPayrollEmployeeAccounts($payroll);
             $payroll = Payroll::query()->with(['payslips.employee.payrollAccount.chartOfAccounts', 'payslips.lines.component'])->lockForUpdate()->findOrFail($payroll->id);
 
-            $settings = $this->settings($payroll->branch_id);
             $errors = $this->validatePayrollReadiness($payroll, 'process');
             if ($errors) {
                 throw ValidationException::withMessages(['readiness' => $errors]);
@@ -496,18 +532,19 @@ class PayrollService
             $expenseByChartAccount = $payroll->payslips
                 ->flatMap->lines
                 ->where('type', 'earning')
+                ->filter(fn (PayslipLine $line) => (($line->meta['affects_net_salary'] ?? true) !== false))
                 ->groupBy(fn (PayslipLine $line) => $line->component?->accounting_account_id ?: $settings->salary_expense_account_id);
 
             foreach ($expenseByChartAccount as $chartAccountId => $lines) {
-                $amount = (float) $lines->sum('amount');
-                if ($amount <= 0) {
+                $amount = $this->sumAmounts($lines->pluck('base_currency_amount'));
+                if ($this->compareAmounts($amount, '0') <= 0) {
                     continue;
                 }
 
                 $items[] = [
-                    'account_id' => $this->resolvePostingAccountId($chartAccountId),
+                    'account_id' => $this->resolvePostingAccountId($chartAccountId, $payroll->branch_id),
                     'description' => "Payroll expense {$payroll->payroll_number}",
-                    'debit' => $this->baseAmount($amount, $payroll->exchange_rate),
+                    'debit' => $this->formatAmount($amount),
                     'credit' => 0,
                 ];
             }
@@ -518,30 +555,30 @@ class PayrollService
                 ->groupBy(fn (PayslipLine $line) => $line->component?->accounting_account_id ?: $settings->salary_expense_account_id);
 
             foreach ($employerExpenseByChartAccount as $chartAccountId => $lines) {
-                $amount = (float) $lines->sum('amount');
-                if ($amount <= 0) {
+                $amount = $this->sumAmounts($lines->pluck('base_currency_amount'));
+                if ($this->compareAmounts($amount, '0') <= 0) {
                     continue;
                 }
 
                 $items[] = [
-                    'account_id' => $this->resolvePostingAccountId($chartAccountId),
+                    'account_id' => $this->resolvePostingAccountId($chartAccountId, $payroll->branch_id),
                     'description' => "Employer contribution expense {$payroll->payroll_number}",
-                    'debit' => $this->baseAmount($amount, $payroll->exchange_rate),
+                    'debit' => $this->formatAmount($amount),
                     'credit' => 0,
                 ];
             }
 
-            $taxTotal = (float) $payroll->payslips
+            $taxTotal = $this->sumAmounts($payroll->payslips
                 ->flatMap->lines
                 ->where('source', 'tax')
-                ->sum('amount');
+                ->pluck('base_currency_amount'));
 
-            if ($taxTotal > 0) {
+            if ($this->compareAmounts($taxTotal, '0') > 0) {
                 $items[] = [
-                    'account_id' => $this->resolvePostingAccountId($settings->tax_payable_account_id),
+                    'account_id' => $this->resolvePostingAccountId($settings->tax_payable_account_id, $payroll->branch_id),
                     'description' => "Payroll tax payable {$payroll->payroll_number}",
                     'debit' => 0,
-                    'credit' => $this->baseAmount($taxTotal, $payroll->exchange_rate),
+                    'credit' => $this->formatAmount($taxTotal),
                 ];
             }
 
@@ -550,48 +587,55 @@ class PayrollService
                 ->filter(fn (PayslipLine $line) => $line->source === 'benefit' || $line->type === 'employer_contribution');
 
             foreach ($benefitLines->groupBy(fn (PayslipLine $line) => $line->meta['payable_account_id'] ?? $line->component?->accounting_account_id ?? $settings->benefit_payable_account_id) as $chartAccountId => $lines) {
-                $amount = (float) $lines->sum('amount');
-                if ($amount <= 0) {
+                $amount = $this->sumAmounts($lines->pluck('base_currency_amount'));
+                if ($this->compareAmounts($amount, '0') <= 0) {
                     continue;
                 }
 
                 $items[] = [
-                    'account_id' => $this->resolvePostingAccountId($chartAccountId),
+                    'account_id' => $this->resolvePostingAccountId($chartAccountId, $payroll->branch_id),
                     'description' => "Payroll benefits payable {$payroll->payroll_number}",
                     'debit' => 0,
-                    'credit' => $this->baseAmount($amount, $payroll->exchange_rate),
+                    'credit' => $this->formatAmount($amount),
                 ];
             }
 
-            $otherDeductionTotal = (float) $payroll->payslips
+            $otherDeductions = $payroll->payslips
                 ->flatMap->lines
                 ->where('type', 'deduction')
-                ->reject(fn (PayslipLine $line) => in_array($line->source, ['tax', 'benefit'], true))
-                ->sum('amount');
+                ->filter(fn (PayslipLine $line) => (($line->meta['affects_net_salary'] ?? true) !== false))
+                ->reject(fn (PayslipLine $line) => in_array($line->source, ['tax', 'benefit'], true));
 
-            if ($otherDeductionTotal > 0) {
+            foreach ($otherDeductions->groupBy(fn (PayslipLine $line) => $line->component?->accounting_account_id) as $chartAccountId => $lines) {
+                $amount = $this->sumAmounts($lines->pluck('base_currency_amount'));
+                if ($this->compareAmounts($amount, '0') <= 0) {
+                    continue;
+                }
                 $items[] = [
-                    'account_id' => $this->resolvePostingAccountId($settings->tax_payable_account_id),
-                    'description' => "Payroll deductions payable {$payroll->payroll_number}",
+                    'account_id' => $this->resolvePostingAccountId($chartAccountId ?: null, $payroll->branch_id),
+                    'description' => "{$lines->first()->name} payable {$payroll->payroll_number}",
                     'debit' => 0,
-                    'credit' => $this->baseAmount($otherDeductionTotal, $payroll->exchange_rate),
+                    'credit' => $this->formatAmount($amount),
                 ];
             }
 
-            $items[] = [
-                'account_id' => $this->resolvePostingAccountId($settings->salary_payable_account_id),
-                'description' => "Net salary payable {$payroll->payroll_number}",
-                'debit' => 0,
-                'credit' => $this->baseAmount((float) $payroll->total_net_payable, $payroll->exchange_rate),
-            ];
+            foreach ($payroll->payslips as $payslip) {
+                $items[] = [
+                    'account_id' => $payslip->employee->payrollAccount->id,
+                    'description' => "Net salary payable - {$payslip->employee->display_name}",
+                    'debit' => 0,
+                    'credit' => $this->formatAmount($payslip->base_currency_amount),
+                ];
+            }
 
             $items = $this->balanceJournalItems($items);
-            $totalDebit = collect($items)->sum(fn ($item) => (float) $item['debit']);
+            $totalDebit = $this->sumAmounts(collect($items)->pluck('debit'));
 
             $voucher = JournalVoucher::query()->create([
                 'branch_id' => $payroll->branch_id,
                 'voucher_no' => 'JV-PAY-' . $payroll->payroll_number,
-                'voucher_date' => now()->toDateString(),
+                'voucher_date' => $payroll->payrollPeriod->end_date->toDateString(),
+                'fiscal_year_id' => $payroll->fiscal_year_id,
                 'currency_id' => $payroll->currency_id,
                 'exchange_rate' => $payroll->exchange_rate ?: 1,
                 'reference' => $payroll->payroll_number,
@@ -606,7 +650,7 @@ class PayrollService
                 'approved' => true,
                 'approved_at' => now(),
                 'approved_by_id' => $actor->id,
-                'total' => number_format($totalDebit, 2, '.', ''),
+                'total' => $this->formatAmount($totalDebit),
             ]);
 
             $voucher->items()->createMany($items);
@@ -618,37 +662,43 @@ class PayrollService
         });
     }
 
-    public function pay(Payroll $payroll, User $actor): JournalVoucher
+    public function pay(Payroll $payroll, User $actor, array $context = []): JournalVoucher
     {
         $this->assertReadyToPay($payroll);
 
-        return DB::transaction(function () use ($payroll, $actor) {
-            $payroll = Payroll::query()->with(['sourceAccount', 'payslips'])->lockForUpdate()->findOrFail($payroll->id);
+        return DB::transaction(function () use ($payroll, $actor, $context) {
+            $payroll = Payroll::query()->with(['sourceAccount', 'payrollPeriod', 'payslips.employee.payrollAccount'])->lockForUpdate()->findOrFail($payroll->id);
 
             if ($payroll->payment_journal_voucher_id) {
                 return $payroll->paymentJournalVoucher;
             }
 
             $settings = $this->settings($payroll->branch_id);
-            $this->assertSourceAccountReady($payroll->sourceAccount);
+            $this->assertSourceAccountReady($payroll->sourceAccount, $payroll->branch_id);
 
-            $items = [
-                [
-                    'account_id' => $this->resolvePostingAccountId($settings->salary_payable_account_id),
-                    'description' => "Salary payable cleared {$payroll->payroll_number}",
-                    'debit' => $this->baseAmount((float) $payroll->total_net_payable, $payroll->exchange_rate),
+            $items = $payroll->payslips->map(fn (Payslip $payslip) => [
+                    'account_id' => $payslip->employee->payrollAccount->id,
+                    'description' => "Salary payable cleared - {$payslip->employee->display_name}",
+                    'debit' => $this->formatAmount($payslip->base_currency_amount),
                     'credit' => 0,
-                ],
-                $this->accountLine($payroll->sourceAccount, "Payroll payment {$payroll->payroll_number}", 0, (float) $payroll->total_net_payable, (float) $payroll->exchange_rate),
-            ];
+                ])->all();
+            $items[] = $this->accountLine(
+                $payroll->sourceAccount,
+                "Payroll payment {$payroll->payroll_number}",
+                0,
+                $this->sumAmounts($payroll->payslips->pluck('base_currency_amount')),
+                1,
+                $payroll->branch_id,
+            );
 
             $items = $this->balanceJournalItems($items);
-            $totalDebit = collect($items)->sum(fn ($item) => (float) $item['debit']);
+            $totalDebit = $this->sumAmounts(collect($items)->pluck('debit'));
 
             $voucher = JournalVoucher::query()->create([
                 'branch_id' => $payroll->branch_id,
                 'voucher_no' => 'JV-PAYMENT-' . $payroll->payroll_number,
-                'voucher_date' => now()->toDateString(),
+                'voucher_date' => $context['payment_date'] ?? now()->toDateString(),
+                'fiscal_year_id' => $payroll->fiscal_year_id,
                 'currency_id' => $payroll->currency_id,
                 'exchange_rate' => $payroll->exchange_rate ?: 1,
                 'reference' => $payroll->payroll_number,
@@ -663,7 +713,7 @@ class PayrollService
                 'approved' => true,
                 'approved_at' => now(),
                 'approved_by_id' => $actor->id,
-                'total' => number_format($totalDebit, 2, '.', ''),
+                'total' => $this->formatAmount($totalDebit),
             ]);
 
             $voucher->items()->createMany($items);
@@ -674,6 +724,27 @@ class PayrollService
                 'payment_journal_voucher_id' => $voucher->id,
             ]);
             $payroll->payslips()->update(['status' => 'paid', 'payment_status' => 'PAID']);
+            foreach ($payroll->payslips as $payslip) {
+                PayrollPayment::query()->updateOrCreate(
+                    ['idempotency_key' => "payroll-payment:{$payroll->id}:{$payslip->id}"],
+                    [
+                        'payroll_run_id' => $payroll->id,
+                        'payroll_id' => $payroll->id,
+                        'payslip_id' => $payslip->id,
+                        'employee_id' => $payslip->employee_id,
+                        'fiscal_year_id' => $payroll->fiscal_year_id,
+                        'amount' => $payslip->net_payable,
+                        'currency_id' => $payslip->currency_id,
+                        'exchange_rate' => $payslip->exchange_rate,
+                        'base_currency_amount' => $payslip->base_currency_amount,
+                        'payment_method' => $payroll->sourceAccount->nature,
+                        'payment_date' => $context['payment_date'] ?? now()->toDateString(),
+                        'reference_number' => $context['payment_reference'] ?? $payslip->payment_reference,
+                        'status' => 'paid',
+                        'remarks' => "Paid through {$voucher->voucher_no}",
+                    ],
+                );
+            }
             $this->log($payroll, 'processed', 'paid', 'payment_journal_voucher_created', $voucher->voucher_no, $actor);
 
             return $voucher->fresh('items.account');
@@ -704,6 +775,10 @@ class PayrollService
             if ($payroll->payment_journal_voucher_id && ! $payroll->payment_reversal_journal_voucher_id) {
                 $paymentReversal = $this->reverseVoucher($payroll->paymentJournalVoucher, $payroll, $actor, $reason, 'payroll_payment_reversal');
                 $payroll->update(['payment_reversal_journal_voucher_id' => $paymentReversal->id]);
+                PayrollPayment::query()->where('payroll_id', $payroll->id)->update([
+                    'status' => 'reversed',
+                    'remarks' => $reason,
+                ]);
             }
 
             $from = $payroll->status;
@@ -769,49 +844,63 @@ class PayrollService
 
     public function recalculatePayslip(Payslip $payslip): void
     {
-        $payslip = $payslip->fresh('lines');
-        $earnings = (float) $payslip->lines()->where('type', 'earning')->sum('amount');
-        $deductions = (float) $payslip->lines()->where('type', 'deduction')->sum('amount');
-        $employer = (float) $payslip->lines()->where('type', 'employer_contribution')->sum('amount');
-        $net = $earnings - $deductions;
+        $payslip = $payslip->fresh(['lines', 'payroll']);
+        $precision = (int) $this->settings($payslip->payroll?->branch_id ?: $payslip->branch_id)->currency_precision;
+        $netLines = $payslip->lines->filter(fn (PayslipLine $line) => (($line->meta['affects_net_salary'] ?? true) !== false));
+        $earnings = $this->sumAmounts($netLines->where('type', 'earning')->pluck('amount'));
+        $deductions = $this->sumAmounts($netLines->where('type', 'deduction')->pluck('amount'));
+        $employer = $this->sumAmounts($netLines->where('type', 'employer_contribution')->pluck('amount'));
+        $net = $this->subtractAmounts($earnings, $deductions);
 
-        if ($net < 0) {
+        if ($this->compareAmounts($net, '0') < 0) {
             abort(422, 'Payslip net payable cannot be negative.');
         }
 
         $payslip->update([
-            'gross_earnings' => number_format($earnings, 2, '.', ''),
-            'salary_payable' => number_format($earnings, 2, '.', ''),
-            'total_deductions' => number_format($deductions, 2, '.', ''),
-            'deduction' => number_format($deductions, 2, '.', ''),
-            'employer_contributions' => number_format($employer, 2, '.', ''),
-            'net_payable' => number_format($net, 2, '.', ''),
-            'total_payable' => number_format($net, 2, '.', ''),
+            'gross_earnings' => $this->formatAmount($earnings, $precision),
+            'salary_payable' => $this->formatAmount($earnings, $precision),
+            'total_deductions' => $this->formatAmount($deductions, $precision),
+            'deduction' => $this->formatAmount($deductions, $precision),
+            'employer_contributions' => $this->formatAmount($employer, $precision),
+            'net_payable' => $this->formatAmount($net, $precision),
+            'total_payable' => $this->formatAmount($net, $precision),
             'base_currency_amount' => $this->baseAmount($net, $payslip->exchange_rate),
         ]);
     }
 
     public function recalculatePayroll(Payroll $payroll): void
     {
+        $precision = (int) $this->settings($payroll->branch_id)->currency_precision;
         $payroll->payslips()->with('lines')->get()->each(fn (Payslip $payslip) => $this->recalculatePayslip($payslip));
 
         $payroll->refresh();
+        $payslips = $payroll->payslips()->get([
+            'gross_earnings',
+            'total_deductions',
+            'net_payable',
+            'base_currency_amount',
+        ]);
+        $totalEarnings = $this->sumAmounts($payslips->pluck('gross_earnings'));
+        $totalDeductions = $this->sumAmounts($payslips->pluck('total_deductions'));
+        $totalNet = $this->sumAmounts($payslips->pluck('net_payable'));
+        $totalBase = $this->sumAmounts($payslips->pluck('base_currency_amount'));
         $payroll->update([
-            'total_employees' => $payroll->payslips()->count(),
-            'total_earnings' => number_format((float) $payroll->payslips()->sum('gross_earnings'), 2, '.', ''),
-            'total_gross' => number_format((float) $payroll->payslips()->sum('gross_earnings'), 2, '.', ''),
-            'total_deductions' => number_format((float) $payroll->payslips()->sum('total_deductions'), 2, '.', ''),
-            'total_net_payable' => number_format((float) $payroll->payslips()->sum('net_payable'), 2, '.', ''),
-            'total_base_currency_amount' => number_format((float) $payroll->payslips()->sum('base_currency_amount'), 2, '.', ''),
+            'total_employees' => $payslips->count(),
+            'total_earnings' => $this->formatAmount($totalEarnings, $precision),
+            'total_gross' => $this->formatAmount($totalEarnings, $precision),
+            'total_deductions' => $this->formatAmount($totalDeductions, $precision),
+            'total_net_payable' => $this->formatAmount($totalNet, $precision),
+            'total_base_currency_amount' => $this->formatAmount($totalBase, $precision),
         ]);
     }
 
-    protected function prepareEmployeeCalculation(User $employee, PayrollPeriod $period, PayrollSetting $settings, bool $strictAttendanceLock = false): array
+    protected function prepareEmployeeCalculation(User $employee, PayrollPeriod $period, PayrollSetting $settings, bool $strictAttendanceLock = false, array $options = []): array
     {
-        $this->ensureEmployeePayrollPrerequisites($employee, $period, $settings);
+        $attendanceResult = $this->ensureEmployeePayrollPrerequisites($employee, $period, $settings);
         $employee->loadMissing('payrollAccount.chartOfAccounts');
 
         $reasons = [];
+        $warnings = $attendanceResult['warnings'] ?? [];
 
         if (! $employee->active) {
             $reasons[] = 'inactive employee';
@@ -851,14 +940,19 @@ class PayrollService
             $reasons[] = 'missing attendance summary';
         } elseif ($strictAttendanceLock && ! $attendance->locked) {
             $reasons[] = 'attendance summary is not locked';
+        } elseif (($attendanceResult['attendance_complete'] ?? true) === false && ! ($options['allow_incomplete_attendance'] ?? false)) {
+            $reasons[] = 'attendance is incomplete; review missing days before payroll';
         } elseif ((float) $attendance->payable_days <= 0) {
             $reasons[] = 'no payable days';
         }
 
         $currencyId = $structure?->currency_id ?: $settings->currency_id;
-        $exchangeRate = (float) ($structure?->exchange_rate ?: 1);
+        $expectedCurrencyId = $options['currency_id'] ?? $settings->currency_id;
+        $exchangeRate = (float) ($options['exchange_rate'] ?? ($structure?->exchange_rate ?: 1));
         if (! $currencyId) {
             $reasons[] = 'invalid currency';
+        } elseif ($expectedCurrencyId && (string) $currencyId !== (string) $expectedCurrencyId) {
+            $reasons[] = 'salary structure currency does not match this payroll run';
         }
         if ($exchangeRate <= 0) {
             $reasons[] = 'invalid exchange rate';
@@ -870,19 +964,20 @@ class PayrollService
         $calculation = null;
 
         if (! $reasons && $structure && $attendance) {
+            $structure->setAttribute('exchange_rate', $exchangeRate);
             $additions = $this->employeeAdditions($employee, $period);
             $deductions = $this->employeeDeductions($employee, $period);
             $reimbursements = $this->employeeReimbursements($employee);
-            $calculation = $this->calculator->calculate($employee, $structure, $attendance, $settings, $additions, $deductions, $reimbursements);
+            $calculation = $this->calculator->calculate($employee, $structure, $attendance, $settings, $additions, $deductions, $reimbursements, $period);
         }
 
-        return compact('reasons', 'structure', 'attendance', 'additions', 'deductions', 'reimbursements', 'calculation');
+        return compact('reasons', 'warnings', 'structure', 'attendance', 'additions', 'deductions', 'reimbursements', 'calculation');
     }
 
-    protected function ensureEmployeePayrollPrerequisites(User $employee, PayrollPeriod $period, PayrollSetting $settings): void
+    protected function ensureEmployeePayrollPrerequisites(User $employee, PayrollPeriod $period, PayrollSetting $settings): array
     {
         if (! $employee->active || ! $this->accountSync->shouldSyncPayrollAccount($employee)) {
-            return;
+            return [];
         }
 
         if (! $employee->payrollAccount || ! $employee->payrollAccount->active || $employee->payrollAccount->chartOfAccounts->isEmpty()) {
@@ -891,7 +986,7 @@ class PayrollService
         }
 
         $this->ensureSalaryStructure($employee, $period, $settings);
-        $this->ensureAttendanceSummary($employee, $period);
+        return $this->ensureAttendanceSummary($employee, $period, $settings);
     }
 
     protected function ensureSalaryStructure(User $employee, PayrollPeriod $period, PayrollSetting $settings): void
@@ -925,7 +1020,7 @@ class PayrollService
         ]);
     }
 
-    protected function ensureAttendanceSummary(User $employee, PayrollPeriod $period): void
+    protected function ensureAttendanceSummary(User $employee, PayrollPeriod $period, PayrollSetting $settings): array
     {
         $existing = AttendanceSummary::query()
             ->where('employee_id', $employee->id)
@@ -933,11 +1028,27 @@ class PayrollService
             ->first();
 
         if ($existing?->locked) {
-            return;
+            return ['summary' => $existing, 'warnings' => [], 'attendance_complete' => true, 'missing_working_dates' => []];
+        }
+
+        if ($existing && $this->attendanceSummaryIsComplete($existing)) {
+            return ['summary' => $existing, 'warnings' => [], 'attendance_complete' => true, 'missing_working_dates' => []];
         }
 
         $employee->loadMissing('shift', 'weeklyHoliday');
-        $this->attendanceSummaryService->calculate($employee, $period, null, true);
+        return $this->attendanceSummaryService->calculate($employee, $period, $settings, true);
+    }
+
+    protected function attendanceSummaryIsComplete(AttendanceSummary $summary): bool
+    {
+        $accountedDays = (float) $summary->present_days
+            + (float) $summary->paid_leave_days
+            + (float) $summary->unpaid_leave_days;
+
+        return (float) $summary->total_working_days > 0
+            && abs($accountedDays - (float) $summary->total_working_days) <= 0.01
+            && ((float) $summary->present_days + (float) $summary->paid_leave_days) > 0
+            && (float) $summary->payable_days >= 0;
     }
 
     protected function employeeBaseSalary(User $employee, PayrollPeriod $period): float
@@ -969,13 +1080,27 @@ class PayrollService
 
             foreach ($payroll->payslips as $payslip) {
                 $employee = $payslip->employee;
-                if (! $employee?->payrollAccount || ! $employee->payrollAccount->active || $employee->payrollAccount->chartOfAccounts->isEmpty()) {
+                $hasScopedChart = $employee?->payrollAccount?->chartOfAccounts
+                    ?->contains(fn (ChartOfAccount $chart) => $chart->active && (! $payroll->branch_id || ! $chart->branch_id || $chart->branch_id === $payroll->branch_id));
+                if (! $employee?->payrollAccount || ! $employee->payrollAccount->active || ! $hasScopedChart) {
                     $errors[] = ($employee?->display_name ?: "Employee #{$payslip->employee_id}") . ' is missing an active payroll payable account.';
                 }
             }
 
             if ($payroll->payslips->flatMap->lines->where('source', 'tax')->sum('amount') > 0 && ! $settings->tax_payable_account_id) {
                 $errors[] = 'Tax payable account is required because this payroll has tax deductions.';
+            }
+
+            $unmappedDeductions = $payroll->payslips
+                ->flatMap->lines
+                ->where('type', 'deduction')
+                ->reject(fn (PayslipLine $line) => in_array($line->source, ['tax', 'benefit'], true))
+                ->filter(fn (PayslipLine $line) => ! $line->component?->accounting_account_id)
+                ->pluck('name')
+                ->unique()
+                ->values();
+            if ($unmappedDeductions->isNotEmpty()) {
+                $errors[] = 'Assign a payable Chart of Account to these deduction components: '.$unmappedDeductions->implode(', ').'.';
             }
 
             $benefitLinesMissingPayable = $payroll->payslips
@@ -994,7 +1119,7 @@ class PayrollService
                 $errors[] = 'Payment From Account is required before payment.';
             } else {
                 try {
-                    $this->assertSourceAccountReady(Account::query()->with('chartOfAccounts')->find($payroll->source_account_id));
+                    $this->assertSourceAccountReady(Account::query()->with('chartOfAccounts')->find($payroll->source_account_id), $payroll->branch_id);
                 } catch (\Throwable $e) {
                     $errors[] = $e->getMessage();
                 }
@@ -1017,24 +1142,33 @@ class PayrollService
         if ($settings->currency_precision < 0 || $settings->currency_precision > 6) {
             $errors[] = 'Payroll currency precision must be between 0 and 6.';
         }
-        if (! in_array($settings->daily_rate_basis, ['working_days', 'calendar_days'], true)) {
+        if (! in_array($settings->daily_rate_basis, ['working_days', 'calendar_days', 'fixed_days'], true)) {
             $errors[] = 'Payroll daily rate basis is invalid.';
         }
         if ((float) $settings->default_overtime_rate < 0) {
             $errors[] = 'Default overtime rate cannot be negative.';
         }
+        if ((float) $settings->late_deduction_per_day < 0) {
+            $errors[] = 'Late deduction per day cannot be negative.';
+        }
+        if ($settings->daily_rate_basis === 'fixed_days' && (int) $settings->default_monthly_working_days < 1) {
+            $errors[] = 'Fixed daily-rate basis requires at least one monthly working day.';
+        }
 
         if (in_array($stage, ['process', 'process_preview'], true)) {
             foreach ([
                 'salary_expense_account_id' => 'Salary expense account is not configured.',
-                'salary_payable_account_id' => 'Salary payable account is not configured.',
             ] as $field => $message) {
                 if (! $settings->{$field}) {
                     $errors[] = $message;
                     continue;
                 }
 
-                if (! ChartOfAccount::query()->whereKey($settings->{$field})->where('active', true)->exists()) {
+                if (! ChartOfAccount::query()
+                    ->whereKey($settings->{$field})
+                    ->where('active', true)
+                    ->when($settings->branch_id, fn ($query) => $query->where(fn ($scope) => $scope->whereNull('branch_id')->orWhere('branch_id', $settings->branch_id)))
+                    ->exists()) {
                     $errors[] = str_replace('not configured', 'not active', $message);
                 }
             }
@@ -1086,10 +1220,15 @@ class PayrollService
                     'component_id' => $adjustment->component_id,
                     'type' => $kind === 'addition' ? 'earning' : 'deduction',
                     'name' => $adjustment->name,
-                    'amount' => number_format($amount, 2, '.', ''),
+                    'amount' => number_format($amount, (int) $this->settings($payslip->branch_id)->currency_precision, '.', ''),
                     'base_currency_amount' => $this->baseAmount($amount, $payslip->exchange_rate),
                     'calculation_type' => $adjustment->calculation_type,
                     'source' => $kind === 'addition' ? 'payroll_addition' : 'payroll_deduction',
+                    'meta' => [
+                        'affects_net_salary' => $adjustment->component_id
+                            ? (bool) SalaryComponent::query()->whereKey($adjustment->component_id)->value('affects_net_salary')
+                            : true,
+                    ],
                     'remarks' => trim(($adjustment->remarks ? $adjustment->remarks . ' ' : '') . "Adjustment:{$adjustment->id}"),
                 ]);
             });
@@ -1114,8 +1253,10 @@ class PayrollService
 
     protected function assertReadyToProcess(Payroll $payroll): void
     {
-        if ($payroll->status !== 'approved') {
-            abort(422, 'Only approved payroll can be processed.');
+        $settings = $this->settings($payroll->branch_id);
+        $canProcessWithoutApproval = $payroll->status === 'generated' && ! $settings->require_approval_before_payment;
+        if ($payroll->status !== 'approved' && ! $canProcessWithoutApproval) {
+            abort(422, 'Approve payroll before processing, or disable the approval requirement in payroll settings.');
         }
 
         $this->assertHasPayslips($payroll);
@@ -1162,9 +1303,13 @@ class PayrollService
         return in_array($payroll->status, ['draft', 'previewed', 'generated', 'reopened'], true);
     }
 
-    protected function accountLine(Account $account, string $description, float $debit, float $credit, float|string|null $exchangeRate = 1): array
+    protected function accountLine(Account $account, string $description, float|string $debit, float|string $credit, float|string|null $exchangeRate = 1, ?string $branchId = null): array
     {
-        $chart = ChartOfAccount::query()->where('account_id', $account->id)->first();
+        $chart = ChartOfAccount::query()
+            ->where('account_id', $account->id)
+            ->where('active', true)
+            ->when($branchId, fn ($query) => $query->where(fn ($scope) => $scope->whereNull('branch_id')->orWhere('branch_id', $branchId)))
+            ->first();
 
         if (! $chart) {
             abort(422, "Account {$account->name} must be linked to a chart account before journal posting.");
@@ -1178,14 +1323,25 @@ class PayrollService
         ];
     }
 
-    protected function resolvePostingAccountId(?string $accountOrChartId): string
+    protected function resolvePostingAccountId(?string $accountOrChartId, ?string $branchId = null): string
     {
-        if ($accountOrChartId && Account::query()->whereKey($accountOrChartId)->exists()) {
-            return $accountOrChartId;
+        if ($accountOrChartId && Account::query()->whereKey($accountOrChartId)->where('active', true)->exists()) {
+            $hasScopedChart = ChartOfAccount::query()
+                ->where('account_id', $accountOrChartId)
+                ->where('active', true)
+                ->when($branchId, fn ($query) => $query->where(fn ($scope) => $scope->whereNull('branch_id')->orWhere('branch_id', $branchId)))
+                ->exists();
+            if ($hasScopedChart) {
+                return $accountOrChartId;
+            }
         }
 
         if ($accountOrChartId) {
-            $accountId = ChartOfAccount::query()->whereKey($accountOrChartId)->value('account_id');
+            $accountId = ChartOfAccount::query()
+                ->whereKey($accountOrChartId)
+                ->where('active', true)
+                ->when($branchId, fn ($query) => $query->where(fn ($scope) => $scope->whereNull('branch_id')->orWhere('branch_id', $branchId)))
+                ->value('account_id');
 
             if ($accountId) {
                 return $accountId;
@@ -1206,7 +1362,7 @@ class PayrollService
         }
     }
 
-    protected function assertSourceAccountReady(?Account $source): void
+    protected function assertSourceAccountReady(?Account $source, ?string $branchId = null): void
     {
         if (! $source) {
             abort(422, 'Payment From Account is required before payroll journal posting.');
@@ -1216,7 +1372,11 @@ class PayrollService
             abort(422, 'Payment From Account must be an active cash or bank account.');
         }
 
-        if (! ChartOfAccount::query()->where('account_id', $source->id)->exists()) {
+        if (! ChartOfAccount::query()
+            ->where('account_id', $source->id)
+            ->where('active', true)
+            ->when($branchId, fn ($query) => $query->where(fn ($scope) => $scope->whereNull('branch_id')->orWhere('branch_id', $branchId)))
+            ->exists()) {
             abort(422, 'Payment From Account must be linked to a Chart of Account.');
         }
     }
@@ -1229,7 +1389,9 @@ class PayrollService
             $employee = $payslip->employee;
             $account = $employee?->payrollAccount;
 
-            if (! $employee || ! $account || ! $account->active || $account->chartOfAccounts->isEmpty()) {
+            $hasScopedChart = $account?->chartOfAccounts
+                ?->contains(fn (ChartOfAccount $chart) => $chart->active && (! $payroll->branch_id || ! $chart->branch_id || $chart->branch_id === $payroll->branch_id));
+            if (! $employee || ! $account || ! $account->active || ! $hasScopedChart) {
                 $missing[] = $employee?->display_name ?: "Employee #{$payslip->employee_id}";
             }
         }
@@ -1241,26 +1403,27 @@ class PayrollService
 
     protected function balanceJournalItems(array $items): array
     {
-        $totalDebit = round(collect($items)->sum(fn ($item) => (float) $item['debit']), 2);
-        $totalCredit = round(collect($items)->sum(fn ($item) => (float) $item['credit']), 2);
-        $difference = round($totalDebit - $totalCredit, 2);
+        $totalDebit = $this->sumAmounts(collect($items)->pluck('debit'));
+        $totalCredit = $this->sumAmounts(collect($items)->pluck('credit'));
+        $difference = $this->subtractAmounts($totalDebit, $totalCredit);
+        $absoluteDifference = ltrim($difference, '-');
 
-        if (abs($difference) <= 0.01 && abs($difference) > 0) {
+        if ($this->compareAmounts($absoluteDifference, '0.000001') <= 0 && $this->compareAmounts($absoluteDifference, '0') > 0) {
             $index = collect($items)
                 ->keys()
                 ->sortByDesc(fn ($key) => max((float) $items[$key]['debit'], (float) $items[$key]['credit']))
                 ->first();
 
             if ((float) $items[$index]['debit'] > 0) {
-                $items[$index]['debit'] = number_format((float) $items[$index]['debit'] - $difference, 2, '.', '');
+                $items[$index]['debit'] = $this->subtractAmounts((string) $items[$index]['debit'], $difference);
             } else {
-                $items[$index]['credit'] = number_format((float) $items[$index]['credit'] + $difference, 2, '.', '');
+                $items[$index]['credit'] = $this->addAmounts((string) $items[$index]['credit'], $difference);
             }
 
             return $items;
         }
 
-        if (abs($difference) > 0.01) {
+        if ($this->compareAmounts($absoluteDifference, '0.000001') > 0) {
             abort(422, "Payroll journal voucher is not balanced. Debit {$totalDebit}, credit {$totalCredit}.");
         }
 
@@ -1360,7 +1523,58 @@ class PayrollService
 
     protected function baseAmount(float|string $amount, float|string|null $exchangeRate): string
     {
-        return number_format((float) $amount * (float) ($exchangeRate ?: 1), 2, '.', '');
+        $rate = (string) ($exchangeRate ?: 1);
+        $base = function_exists('bcmul')
+            ? bcmul((string) $amount, $rate, 6)
+            : ((float) $amount * (float) $rate);
+
+        return $this->formatAmount($base);
+    }
+
+    protected function formatAmount(float|string $amount, int $precision = 6): string
+    {
+        return number_format((float) $amount, $precision, '.', '');
+    }
+
+    protected function sumAmounts(iterable $amounts): string
+    {
+        $total = '0.000000';
+
+        foreach ($amounts as $amount) {
+            $total = $this->addAmounts($total, (string) ($amount ?: 0));
+        }
+
+        return $total;
+    }
+
+    protected function addAmounts(string $left, string $right): string
+    {
+        return function_exists('bcadd')
+            ? bcadd($left, $right, 6)
+            : number_format((float) $left + (float) $right, 6, '.', '');
+    }
+
+    protected function subtractAmounts(string $left, string $right): string
+    {
+        return function_exists('bcsub')
+            ? bcsub($left, $right, 6)
+            : number_format((float) $left - (float) $right, 6, '.', '');
+    }
+
+    protected function compareAmounts(string $left, string $right): int
+    {
+        return function_exists('bccomp')
+            ? bccomp($left, $right, 6)
+            : ((float) $left <=> (float) $right);
+    }
+
+    protected function fiscalYearForDate(mixed $date): ?FiscalYear
+    {
+        return FiscalYear::query()
+            ->where('active', true)
+            ->whereDate('start_date', '<=', $date)
+            ->whereDate('end_date', '>=', $date)
+            ->first();
     }
 
     protected function loadPayroll(Payroll $payroll): Payroll

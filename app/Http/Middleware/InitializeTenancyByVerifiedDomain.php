@@ -51,11 +51,7 @@ class InitializeTenancyByVerifiedDomain
         } catch (QueryException|PDOException) {
             return $request->expectsJson()
                 ? response()->json(['message' => 'Database configuration is invalid or the database is unavailable.'], 503)
-                : response()->view('vendor.installer.recover', [
-                    'problems' => ['Database configuration is invalid or the database is unavailable. Verify .env and remove stale Laravel config cache.'],
-                    'hasStaleConfigCache' => is_file(base_path('bootstrap/cache/config.php')),
-                    'resetAllowed' => false,
-                ], 503);
+                : response()->view('errors.503', [], 503);
         }
 
         return $next($request);

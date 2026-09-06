@@ -219,6 +219,9 @@ class WebsiteController extends Controller
             return $disabled;
         }
         $article = ResourceArticle::with(['category:id,name,slug', 'featuredMedia'])->where('slug', $slug)->where('status', 'published')->where(fn ($q) => $q->whereNull('published_at')->orWhere('published_at', '<=', now()))->firstOrFail();
+        if (blank($article->canonical_url)) {
+            $article->setAttribute('canonical_url', rtrim((string) app(PlatformSettingsService::class)->get('seo.canonical_base_url', config('app.url')), '/').'/resources/'.$article->slug);
+        }
         $article->setAttribute('gallery', Media::whereIn('id', $article->gallery_media_ids ?? [])->get());
 
         return Inertia::render('Central/Website/ResourceArticle', $this->sharedPublic() + ['article' => $article]);

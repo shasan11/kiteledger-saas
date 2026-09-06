@@ -7,6 +7,8 @@
  * now reusable by the review workspace.
  */
 
+import { formatMoney } from '@/utils/money';
+
 export const STATUS_LABELS = {
     uploaded: 'Uploaded',
     queued: 'Queued',
@@ -169,9 +171,18 @@ export function cleanExtractionValue(value, fallback = '-') {
     return safeDisplay(value, fallback);
 }
 
-export function money(value) {
+/**
+ * Extracted amounts are money, so they are shown as money. The currency comes
+ * from the extraction payload - the document's own currency when it stated one,
+ * the tenant's base currency otherwise - never assumed here.
+ */
+export function money(value, currency = null) {
     const numeric = Number(value || 0);
-    return Number.isFinite(numeric) ? numeric.toLocaleString(undefined, { maximumFractionDigits: 2 }) : '-';
+    if (!Number.isFinite(numeric)) return '-';
+
+    return currency
+        ? formatMoney(numeric, currency)
+        : numeric.toLocaleString(undefined, { maximumFractionDigits: 2 });
 }
 
 export function fileSize(bytes) {

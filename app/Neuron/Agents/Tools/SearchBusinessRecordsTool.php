@@ -13,11 +13,17 @@ use NeuronAI\Tools\ToolProperty;
 
 final class SearchBusinessRecordsTool extends Tool
 {
-    private const MODULES = ['invoices', 'quotations', 'sales_orders', 'customer_payments', 'credit_notes', 'purchase_orders', 'purchase_bills', 'supplier_payments', 'debit_notes', 'expenses', 'journal_vouchers', 'cash_transfers', 'products', 'contacts'];
+    private const MODULES = [
+        'invoices', 'quotations', 'sales_orders', 'customer_payments', 'credit_notes',
+        'purchase_orders', 'purchase_bills', 'supplier_payments', 'debit_notes',
+        'expenses', 'journal_vouchers', 'cash_transfers', 'products', 'contacts',
+        'crm_accounts', 'leads', 'deals', 'crm_activities', 'crm_campaigns',
+        'projects', 'milestones', 'tasks',
+    ];
 
     public function __construct(private CopilotContext $context, private AiRecordSearchService $search)
     {
-        parent::__construct('search_business_records', 'Search one allowlisted ERP record type using trusted tenant, branch, and fiscal-year context. Never accepts table names, SQL, tenant IDs, branch IDs, or fiscal-year IDs.');
+        parent::__construct('search_business_records', 'Search one allowlisted ERP, CRM, or Projects record type using trusted tenant, branch, and fiscal-year context. Never accepts table names, SQL, tenant IDs, branch IDs, or fiscal-year IDs.');
     }
 
     protected function properties(): array

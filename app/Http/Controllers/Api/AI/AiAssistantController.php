@@ -8,8 +8,11 @@ use App\Models\AiConversation;
 use App\Services\AI\AiPromptBuilder;
 use App\Services\AI\AiProviderException;
 use App\Services\AI\AiReadinessService;
+use App\Services\Reports\Intelligence\ReportAccessDeniedException;
+use App\Services\Reports\Intelligence\ReportIntelligenceService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use InvalidArgumentException;
 use Throwable;
 
 class AiAssistantController extends AiAgentChatController
@@ -155,6 +158,16 @@ class AiAssistantController extends AiAgentChatController
         return response()->json(['ok' => true]);
     }
 
+    /**
+     * Report summary for the Copilot surface.
+     *
+     * Delegates to ReportIntelligenceService rather than summarizing here: this
+     * endpoint used to accept a `report_data` blob from the browser and treat
+     * it as the report's contents, which made the client the authority on the
+     * company's financial figures. `report_data` and `title` are still accepted
+     * so older client bundles do not fail validation, but they are ignored —
+     * the server executes the report itself.
+     */
     public function reportSummary(Request $request): JsonResponse
     {
         $user = $request->user();
@@ -165,40 +178,39 @@ class AiAssistantController extends AiAgentChatController
         $data = $request->validate([
             'category' => 'required|string|max:60',
             'report_key' => 'required|string|max:120',
-            'filters' => 'nullable|array',
+            'filters' => 'nullable|array|max:40',
             'report_data' => 'nullable|array',
             'title' => 'nullable|string|max:200',
         ]);
 
-        $branch = $this->contextBuilder->branchScope($request, $user);
-        $reportContext = [
-            'title' => $data['title'] ?? ($data['category'].' / '.$data['report_key']),
-            'category' => $data['category'],
-            'report_key' => $data['report_key'],
-            'filters' => $data['filters'] ?? [],
-            'branch_scope' => $branch,
-            'report' => $this->compressReportData($data['report_data'] ?? []),
-            'generated_at' => now()->toIso8601String(),
-        ];
-
-        $messages = $this->prompts->buildReportSummaryMessages($reportContext);
-
         try {
-            $result = $this->provider->chat($messages);
+            $summary = app(ReportIntelligenceService::class)->summarize(
+                $request,
+                $data['category'],
+                $data['report_key'],
+                $data['filters'] ?? [],
+            );
+        } catch (ReportAccessDeniedException $e) {
+            return response()->json(['ok' => false, 'code' => 'AI_PERMISSION_DENIED', 'message' => $e->getMessage()], 403);
+        } catch (InvalidArgumentException $e) {
+            return response()->json(['ok' => false, 'code' => 'AI_NO_REPORT_DATA', 'message' => $e->getMessage()], 422);
         } catch (AiProviderException $e) {
             return response()->json($e->toArray() + ['ok' => false], $e->httpStatus());
         }
 
-        $parsed = $this->tryParseJson($result['text'] ?? '');
-
         return response()->json([
             'ok' => true,
-            'summary' => $parsed['summary'] ?? trim($result['text'] ?? ''),
-            'key_numbers' => $parsed['key_numbers'] ?? [],
-            'risks' => $parsed['risks'] ?? [],
-            'actions' => $parsed['actions'] ?? [],
-            'branch_scope' => $branch,
-            'generated_at' => now()->toIso8601String(),
+            // Legacy keys, preserved so the existing Copilot client keeps
+            // rendering; `key_numbers` now carries verified server-computed
+            // figures rather than model-written strings.
+            'summary' => $summary['executive_summary'],
+            'key_numbers' => $summary['summary']['key_numbers'],
+            'risks' => $summary['risks'],
+            'actions' => $summary['recommended_actions'],
+            'branch_scope' => $summary['data_scope'],
+            'generated_at' => $summary['generated_at'],
+
+            'data' => $summary,
         ]);
     }
 
@@ -252,23 +264,6 @@ class AiAssistantController extends AiAgentChatController
             'actions' => $parsed['actions'] ?? [],
             'branch_scope' => $snapshot['branch_scope'],
         ]);
-    }
-
-    private function compressReportData(array $reportData): array
-    {
-        if (empty($reportData)) {
-            return [];
-        }
-
-        foreach (['rows', 'data', 'items'] as $key) {
-            if (isset($reportData[$key]) && is_array($reportData[$key])) {
-                $reportData['row_count'] = count($reportData[$key]);
-                $reportData[$key] = array_slice($reportData[$key], 0, 20);
-                break;
-            }
-        }
-
-        return $reportData;
     }
 
     private function tryParseJson(string $text): ?array

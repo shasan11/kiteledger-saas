@@ -217,7 +217,7 @@ export default function ReusableCrud({
       shell: {
         background: token.colorBgContainer,
         border: `1px solid ${token.colorBorderSecondary}`,
-        borderRadius: token.borderRadiusLG,
+        borderRadius: 0,
         overflow: "hidden",
       },
       toolbar: {
@@ -4164,6 +4164,13 @@ export default function ReusableCrud({
     () => `
       .reusable-crud-token .ant-table {
         background: ${token.colorBgContainer};
+        border-radius: 0 !important;
+      }
+
+      .reusable-crud-token .ant-table-container,
+      .reusable-crud-token .ant-table-thead > tr:first-child > th:first-child,
+      .reusable-crud-token .ant-table-thead > tr:first-child > th:last-child {
+        border-radius: 0 !important;
       }
 
       .reusable-crud-token .ant-table-thead > tr > th {

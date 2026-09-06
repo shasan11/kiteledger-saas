@@ -4,6 +4,7 @@ namespace App\Services\AI;
 
 use App\Models\AiEmbedding;
 use App\Models\AiKnowledgeChunk;
+use App\Services\AI\Providers\AiProviderCapabilityRegistry;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
@@ -22,7 +23,10 @@ class AiReadinessService
 
     private const DOCUMENT_VERIFICATION_CACHE_PREFIX = 'ai:document-verification:';
 
-    public function __construct(private readonly AiSettingsService $settings) {}
+    public function __construct(
+        private readonly AiSettingsService $settings,
+        private readonly AiProviderCapabilityRegistry $capabilities,
+    ) {}
 
     /**
      * The AI provider is platform-wide config (AiSettingsService reads it off
@@ -173,30 +177,134 @@ class AiReadinessService
         return $this->capabilitiesFor($this->settings->provider(), $this->settings->model());
     }
 
-    /** @return array{chat:bool,tool_calling:bool,document_vision:bool} */
+    /**
+     * Administrator-facing health rows.
+     *
+     * One row per capability an operator actually asks about, each reduced to
+     * ready / not ready with a reason and the action that fixes it. The raw
+     * evaluate() payload is a flat bag of thirty booleans, which is the right
+     * shape for code and the wrong shape for a person deciding what to do next.
+     *
+     * Never shown to ordinary users: knowing that "the queue worker heartbeat
+     * is stale" is an operator's job, not a bookkeeper's.
+     *
+     * @return array<string, mixed>
+     */
+    public function dashboard(): array
+    {
+        $state = $this->evaluate();
+        $failover = app(\App\Services\AI\Providers\AiProviderFailover::class);
+        $capabilities = $this->capabilities->for($this->settings->provider(), $this->settings->model());
+
+        $row = static fn (string $label, bool $ready, string $detail, ?string $action = null): array => array_filter([
+            'label' => $label,
+            'ready' => $ready,
+            'status' => $ready ? 'Ready' : 'Not ready',
+            'detail' => $detail,
+            'action' => $ready ? null : $action,
+        ], static fn ($value) => $value !== null);
+
+        return [
+            'overall_ready' => $state['operational_ready'],
+            'checks' => [
+                'chat_provider' => $row(
+                    'Chat provider',
+                    $state['provider_connection_verified'] && $state['selected_model_valid'],
+                    $state['provider_configured']
+                        ? 'Credentials are configured and the connection test has passed.'
+                        : 'No credentials are configured for the chat provider.',
+                    'Open AI Settings, enter the provider credentials and run the connection test.',
+                ),
+                'copilot' => $row(
+                    'Copilot',
+                    $state['copilot_ready'],
+                    $state['tool_calling_available']
+                        ? 'The Copilot can answer questions and read your figures.'
+                        : 'The selected model cannot use data tools, so the Copilot cannot report figures.',
+                    'Select a model that supports tool calling in AI Settings.',
+                ),
+                'embeddings' => $row(
+                    'Embeddings',
+                    $state['embedding_provider_configured'],
+                    $state['embedding_provider_configured']
+                        ? 'The embedding provider is configured.'
+                        : 'Semantic search is unavailable; KiteLedger falls back to keyword search.',
+                    'Configure an embedding provider and model in AI Settings.',
+                ),
+                'knowledge_index' => $row(
+                    'Knowledge index',
+                    $state['rag_index_ready'],
+                    $state['rag_index_ready']
+                        ? sprintf('%d documents indexed.', $state['rag_chunks'])
+                        : 'The knowledge index is empty or incomplete.',
+                    'Run the knowledge indexing command, or use Rebuild index in AI Settings.',
+                ),
+                'document_scanning' => $row(
+                    'Document scanning',
+                    $state['document_scanning_available'],
+                    $state['document_vision_capability_available']
+                        ? 'Uploaded documents can be read.'
+                        : 'The selected document model cannot read both PDFs and images.',
+                    'Select a model that supports PDF and image input, and confirm a queue worker is running.',
+                ),
+                'queue_worker' => $row(
+                    'Queue worker',
+                    $state['queue_configured'] && $state['queue_worker_healthy'],
+                    $state['queue_worker_healthy']
+                        ? 'A worker has reported in recently.'
+                        : 'No recent worker heartbeat; queued document scans will not run.',
+                    'Start or restart the queue worker process.',
+                ),
+                'streaming' => $row(
+                    'Streaming',
+                    $state['streaming_available'],
+                    $state['streaming_available']
+                        ? 'Answers appear as they are written.'
+                        : 'Answers appear all at once. This is a display difference only.',
+                    'Enable streaming in AI Settings.',
+                ),
+                'fallback_provider' => $row(
+                    'Fallback provider',
+                    $failover->isConfigured(),
+                    $failover->isConfigured()
+                        ? sprintf('%s will answer if the main provider is temporarily unavailable.', $failover->fallbackProvider())
+                        : 'No spare provider is configured; a provider outage will interrupt AI features.',
+                    'Set AI_FALLBACK_PROVIDER and AI_FALLBACK_MODEL, and add credentials for that provider.',
+                ),
+            ],
+            'capabilities' => $capabilities->toArray(),
+            'limitations' => $capabilities->limitations(),
+            'last_provider_test_at' => $state['provider_verified_at'],
+            'last_document_test_at' => $state['document_provider_connection_verified']
+                ? ($this->recallCentrally($this->documentVerificationKey())['verified_at'] ?? null)
+                : null,
+            'last_indexed_at' => $state['rag_last_indexed_at'],
+            'issues' => $state['issues'],
+        ];
+    }
+
+    /**
+     * Capabilities of a provider/model pair.
+     *
+     * Delegates to the one registry rather than inferring them here. The
+     * substring tables previously lived in this class *and* in
+     * AiSettingsService's own embedding-provider list, so the two could
+     * disagree about the same configuration — the settings screen would accept
+     * a combination readiness then refused.
+     *
+     * @return array{chat:bool,tool_calling:bool,document_vision:bool}
+     */
     private function capabilitiesFor(string $provider, string $model): array
     {
-        $provider = strtolower($provider);
-        $model = strtolower($model);
-        $chat = $model !== '';
+        $capabilities = $this->capabilities->for($provider, $model);
 
-        $toolCalling = match ($provider) {
-            'openai' => $this->contains($model, ['gpt-4o', 'gpt-4.1', 'gpt-5', 'o3', 'o4']),
-            'gemini' => $this->contains($model, ['gemini-1.5', 'gemini-2', 'gemini-3']),
-            'groq' => $this->contains($model, ['llama-3.1', 'llama-3.3', 'qwen', 'mixtral']),
-            'openrouter' => $this->contains($model, ['gpt-4o', 'gpt-4.1', 'gpt-5', 'gemini', 'claude-3', 'llama-3.1', 'llama-3.3', 'qwen']),
-            'ollama' => $this->contains($model, ['llama3.1', 'llama3.2', 'qwen2.5', 'qwen3', 'mistral-nemo']),
-            default => false,
-        };
-
-        $vision = match ($provider) {
-            'openai' => $this->contains($model, ['gpt-4o', 'gpt-4.1', 'gpt-5']),
-            'gemini' => $this->contains($model, ['gemini-1.5', 'gemini-2', 'gemini-3']),
-            'openrouter' => $this->contains($model, ['gpt-4o', 'gpt-4.1', 'gpt-5', 'gemini', 'claude-3', 'qwen-vl', 'pixtral']),
-            default => false,
-        };
-
-        return ['chat' => $chat, 'tool_calling' => $toolCalling, 'document_vision' => $vision];
+        return [
+            'chat' => $capabilities->chat,
+            'tool_calling' => $capabilities->tools,
+            // Document scanning needs both image and PDF input; reporting
+            // vision alone would enable scanning for a model that rejects PDFs.
+            'document_vision' => $capabilities->canReadDocuments(),
+        ];
     }
 
     private function verificationKey(): string
@@ -283,15 +391,4 @@ class AiReadinessService
         ];
     }
 
-    /** @param array<int, string> $needles */
-    private function contains(string $value, array $needles): bool
-    {
-        foreach ($needles as $needle) {
-            if (str_contains($value, $needle)) {
-                return true;
-            }
-        }
-
-        return false;
-    }
 }

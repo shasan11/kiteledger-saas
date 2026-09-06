@@ -304,11 +304,18 @@ class AiAgentChatController extends Controller
             ]));
         }
 
+        // The most recent turns, not the oldest: ordering ascending before
+        // LIMIT keeps the first 20 messages of the conversation and silently
+        // drops the question actually being asked once a thread passes 20
+        // turns. Collected newest-first, then restored to chronological order.
         $history = $conversation->messages()
-            ->orderBy('created_at')
-            ->limit(20)
+            ->orderByDesc('created_at')
+            ->orderByDesc('id')
+            ->limit(max(2, min(50, (int) config('ai.copilot.history_messages', 20))))
             ->get(['role', 'content'])
+            ->reverse()
             ->map(fn ($m) => ['role' => $m->role, 'content' => $m->content])
+            ->values()
             ->toArray();
 
         $startedAt = microtime(true);

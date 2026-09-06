@@ -63,7 +63,7 @@ class CopilotEvaluationTest extends TestCase
             {
             }
 
-            public function chat(): AIProviderInterface
+            public function chat(bool $interactive = false): AIProviderInterface
             {
                 return $this->fake;
             }

@@ -40,9 +40,9 @@ class EmployeeReimbursement extends Model
     {
         return [
             'date' => 'date',
-            'amount' => 'decimal:2',
+            'amount' => 'decimal:6',
             'exchange_rate' => 'decimal:6',
-            'base_currency_amount' => 'decimal:2',
+            'base_currency_amount' => 'decimal:6',
             'approved_at' => 'datetime',
             'include_in_payroll' => 'boolean',
         ];

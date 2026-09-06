@@ -18,8 +18,8 @@ import {
     Modal,
     Pagination,
     Select,
+    Skeleton,
     Space,
-    Statistic,
     Table,
     Tag,
     Tooltip,
@@ -60,18 +60,82 @@ const STATUS_COLORS = {
     archived: 'default',
 };
 
+function DocumentsSkeleton({ isMobile, token }) {
+    if (isMobile) {
+        return (
+            <div aria-label="Loading documents" style={{ display: 'grid', gap: 4, padding: 6 }}>
+                {Array.from({ length: 3 }).map((_, index) => (
+                    <div
+                        key={index}
+                        style={{ padding: '7px 10px', borderBottom: `1px solid ${token.colorBorderSecondary}` }}
+                    >
+                        <Skeleton active title={{ width: '52%' }} paragraph={{ rows: 1, width: '34%' }} />
+                    </div>
+                ))}
+            </div>
+        );
+    }
+
+    return (
+        <div aria-label="Loading documents">
+            <div
+                style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'minmax(220px, 2fr) 120px 130px 120px 130px 110px 44px',
+                    gap: 16,
+                    padding: '7px 10px',
+                    background: token.colorFillQuaternary,
+                    borderBottom: `1px solid ${token.colorBorderSecondary}`,
+                }}
+            >
+                {Array.from({ length: 7 }).map((_, index) => (
+                    <Skeleton.Input key={index} active size="small" style={{ width: index === 0 ? '45%' : '68%' }} />
+                ))}
+            </div>
+            {Array.from({ length: 4 }).map((_, rowIndex) => (
+                <div
+                    key={rowIndex}
+                    style={{
+                        display: 'grid',
+                        gridTemplateColumns: 'minmax(220px, 2fr) 120px 130px 120px 130px 110px 44px',
+                        alignItems: 'center',
+                        gap: 16,
+                        minHeight: 42,
+                        padding: '5px 10px',
+                        borderBottom: `1px solid ${token.colorBorderSecondary}`,
+                    }}
+                >
+                    <div>
+                        <Skeleton.Input active size="small" style={{ width: `${150 + (rowIndex % 3) * 24}px` }} />
+                        <Skeleton.Input active size="small" style={{ display: 'block', width: 90, marginTop: 3 }} />
+                    </div>
+                    {Array.from({ length: 5 }).map((_, columnIndex) => (
+                        <Skeleton.Input
+                            key={columnIndex}
+                            active
+                            size="small"
+                            style={{ width: columnIndex === 1 ? 74 : 88 }}
+                        />
+                    ))}
+                    <Skeleton.Avatar active size="small" shape="circle" />
+                </div>
+            ))}
+        </div>
+    );
+}
+
 import {
     STATUS_LABELS, SUMMARY_FIELDS, TOTAL_FIELDS, LINE_ITEM_KEYS, PARTY_KEYS,
     EXCLUDED_EXTRACTION_KEYS, hasPerm, docKey, isUuidLike, isIdLikeKey, humanize,
-    safeDisplay, asArray, asObject, cleanExtractionValue, money, fileSize,
+    safeDisplay, asArray, asObject, cleanExtractionValue, money,
     toOptions, formatList, recalcLines, pickValue, getFirstObject,
     getExtractedParty, getLineItems, normalizeLineItem, reviewLinesFromData,
     buildKnownRows, buildObjectRows, getLineValue, optionLabel,
 } from './documentUtils';
 import DocumentActionMenu from '../Components/DocumentActionMenu';
 import RemoteSelect from '../Components/RemoteSelect';
-import DocumentSummaryCards from '../Components/DocumentSummaryCards';
 import DocumentPreview from '../Components/DocumentPreview';
+import DocumentStatusTag, { getDocumentStatusIconColor } from '../Components/DocumentStatusTag';
 
 
 export default function DocumentUploadIndex() {
@@ -84,8 +148,7 @@ export default function DocumentUploadIndex() {
     const aiReadiness = config.ai_readiness || {};
 
     const [documents, setDocuments] = useState({ data: [], total: 0 });
-    const [summary, setSummary] = useState(null);
-    const [loading, setLoading] = useState(false);
+    const [loading, setLoading] = useState(true);
     const [filters, setFilters] = useState({ search: '', status: undefined, document_type: undefined, range: null });
     const [page, setPage] = useState(1);
     const [pageSize, setPageSize] = useState(20);
@@ -146,42 +209,40 @@ export default function DocumentUploadIndex() {
     const documentTypeOptions = useMemo(() => toOptions(config.document_types || []), [config.document_types]);
 
     const styles = useMemo(() => ({
-        page: { padding: 24, minHeight: '100%', background: token.colorBgLayout },
+        page: { padding: 0, minHeight: '100%', background: token.colorBgLayout },
         appHeader: {
             display: 'flex',
             justifyContent: 'space-between',
             gap: 16,
-            marginBottom: 16,
+            marginBottom: 0,
             alignItems: 'center',
-            padding: 20,
-            borderRadius: 12,
+            padding: '10px 12px',
+            borderRadius: 0,
             background: token.colorBgContainer,
             border: `1px solid ${token.colorBorderSecondary}`,
-            boxShadow: token.boxShadowTertiary,
         },
         appHeaderLeft: {
             display: 'flex',
             alignItems: 'center',
-            gap: 14,
+            gap: 10,
         },
         appIcon: {
-            width: 46,
-            height: 46,
-            borderRadius: 12,
+            width: 34,
+            height: 34,
+            borderRadius: 0,
             display: 'inline-flex',
             alignItems: 'center',
             justifyContent: 'center',
             background: token.colorPrimaryBg,
             color: token.colorPrimary,
-            fontSize: 22,
+            fontSize: 17,
         },
         header: { display: 'flex', justifyContent: 'space-between', gap: 16, marginBottom: 16, alignItems: 'flex-start' },
         title: { margin: 0, color: token.colorText },
-        subtitle: { margin: '4px 0 0', color: token.colorTextSecondary },
-        statGrid: { display: 'grid', gridTemplateColumns: 'repeat(5, minmax(120px, 1fr))', gap: 12, marginBottom: 16 },
-        filters: { marginBottom: 16 },
-        filterInner: { display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center' },
-        card: { borderRadius: 8, borderColor: token.colorBorderSecondary },
+        subtitle: { margin: '1px 0 0', color: token.colorTextSecondary, fontSize: 11 },
+        filters: { marginBottom: 0, borderBottom: 0 },
+        filterInner: { display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' },
+        card: { borderRadius: 0, borderColor: token.colorBorderSecondary },
         iframe: { width: '100%', height: '72vh', border: `1px solid ${token.colorBorderSecondary}`, borderRadius: 8, background: token.colorBgContainer },
         drawerBody: { paddingBottom: 72 },
         actionBar: { position: 'absolute', right: 0, bottom: 0, left: 0, padding: '12px 24px', background: token.colorBgElevated, borderTop: `1px solid ${token.colorBorderSecondary}`, display: 'flex', justifyContent: 'flex-end', gap: 8 },
@@ -224,17 +285,17 @@ export default function DocumentUploadIndex() {
                 per_page: data?.per_page ?? data?.meta?.per_page ?? nextPageSize,
             });
 
-            // Counts cover the whole filtered dataset, not this page.
-            if (data?.summary) {
-                setSummary(data.summary);
-            }
         } catch (e) {
             if (axios.isCancel?.(e) || e.name === 'CanceledError') return;
             if (!mountedRef.current) return;
 
             antMessage.error(e.response?.data?.message || 'Failed to load documents');
         } finally {
-            if (mountedRef.current) {
+            // A previous request may finish after a newer filter/page request
+            // has already started. Keep the preloader visible until the
+            // latest request has finished, rather than briefly showing the
+            // empty-state table.
+            if (mountedRef.current && listAbortRef.current === controller) {
                 setLoading(false);
             }
         }
@@ -744,8 +805,9 @@ export default function DocumentUploadIndex() {
 
         if (record.extraction) {
             return {
-                label: record.status === 'converted' ? 'Open draft' : 'Review & continue',
+                label: record.status === 'converted' ? 'View details' : 'Review',
                 icon: <SwapOutlined />,
+                primary: record.status !== 'converted',
                 disabled: !canReview,
                 reason: canReview ? null : 'You do not have permission to review extracted document data.',
                 onClick: () => openReviewWorkspace(record),
@@ -763,55 +825,60 @@ export default function DocumentUploadIndex() {
         {
             title: 'Document',
             dataIndex: 'label',
+            width: 330,
             render: (value, record) => (
-                <Space direction="vertical" size={0}>
-                    <Text strong>{value || 'Untitled Document'}</Text>
-                    <Text type="secondary" style={{ fontSize: 12 }}>
-                        {record.original_name || '-'}
-                    </Text>
+                <Space size={9} align="start">
+                    <span
+                        style={{
+                            width: 28,
+                            height: 28,
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            background: token.colorFillTertiary,
+                            color: getDocumentStatusIconColor(record.status, token),
+                        }}
+                    >
+                        <FileTextOutlined />
+                    </span>
+                    <span style={{ minWidth: 0 }}>
+                        <Text strong ellipsis style={{ display: 'block', fontSize: 13 }}>{value || 'Untitled Document'}</Text>
+                        <Text type="secondary" ellipsis style={{ display: 'block', maxWidth: 270, fontSize: 10 }}>
+                            {humanize(record.document_type || 'unknown')}
+                        </Text>
+                    </span>
                 </Space>
             ),
         },
         {
-            title: 'Type',
-            dataIndex: 'document_type',
-            width: 150,
-            render: (value) => <Tag>{humanize(value || 'unknown')}</Tag>,
-        },
-        {
-            title: 'Workflow status',
+            title: 'Status',
             dataIndex: 'status',
-            width: 150,
-            render: (value) => (
-                <Tag color={STATUS_COLORS[value] || 'default'}>
-                    {STATUS_LABELS[value] || humanize(value)}
-                </Tag>
-            ),
+            width: 135,
+            render: (value, record) => <DocumentStatusTag status={value} issueCount={record.extraction?.review_issue_count || 0} />,
         },
         {
-            title: 'AI extraction',
-            width: 140,
+            title: 'Extraction',
+            width: 135,
             render: (_, record) => record.extraction
-                ? <Tag color="blue">{record.extraction.stage?.label || humanize(record.extraction.status)}</Tag>
-                : <Tag>No Scan</Tag>,
-        },
-        {
-            title: 'File Size',
-            dataIndex: 'size',
-            width: 120,
-            render: fileSize,
+                ? <Text style={{ fontSize: 12 }}>{record.extraction.stage?.label || humanize(record.extraction.status)}</Text>
+                : <Text type="secondary" style={{ fontSize: 12 }}>Not scanned</Text>,
         },
         {
             title: 'Uploaded',
             dataIndex: 'created_at',
-            width: 170,
-            render: (value) => (value ? new Date(value).toLocaleString() : '-'),
+            width: 130,
+            render: (value) => value ? (
+                <span>
+                    <Text style={{ display: 'block', fontSize: 12 }}>{dayjs(value).format('DD MMM YYYY')}</Text>
+                    <Text type="secondary" style={{ fontSize: 10 }}>{dayjs(value).format('h:mm A')}</Text>
+                </span>
+            ) : '-',
         },
         {
             title: '',
             key: 'actions',
             fixed: 'right',
-            width: 220,
+            width: 205,
             render: (_, record) => {
                 const next = primaryAction(record);
 
@@ -821,7 +888,7 @@ export default function DocumentUploadIndex() {
                             <span>
                                 <Button
                                     size="small"
-                                    type="primary"
+                                    type={next.primary ? 'primary' : 'link'}
                                     icon={next.icon}
                                     disabled={next.disabled}
                                     onClick={next.onClick}
@@ -856,16 +923,29 @@ export default function DocumentUploadIndex() {
         <AuthenticatedLayout>
             <Head title="Documents" />
 
-            <div style={styles.page}>
-                <div style={styles.appHeader}>
+            <div className="document-inbox" style={styles.page}>
+                <style>{`
+                    .document-inbox .ant-card,
+                    .document-inbox .ant-table,
+                    .document-inbox .ant-table-container,
+                    .document-inbox .ant-table-thead > tr:first-child > th:first-child,
+                    .document-inbox .ant-table-thead > tr:first-child > th:last-child {
+                        border-radius: 0 !important;
+                    }
+                    .document-inbox .ant-table-cell { padding: 7px 10px !important; }
+                    .document-inbox .ant-table-thead > tr > th { font-size: 11px; font-weight: 700; }
+                    .document-inbox .ant-table-tbody > tr:hover > td { background: ${token.colorFillQuaternary} !important; }
+                `}</style>
+                <Card size="small" style={{ ...styles.card, overflow: 'hidden' }} styles={{ body: { padding: 0 } }}>
+                <div style={{ ...styles.appHeader, margin: 0, border: 0, borderBottom: `1px solid ${token.colorBorderSecondary}` }}>
                     <div style={styles.appHeaderLeft}>
                         <div style={styles.appIcon}>
                             <FileTextOutlined />
                         </div>
                         <div>
-                            <Title level={3} style={styles.title}>Document Intelligence</Title>
+                            <Title level={5} style={styles.title}>Documents</Title>
                             <Paragraph style={styles.subtitle}>
-                                Upload, scan, review, and convert business documents into draft transactions.
+                                Upload, review, and turn documents into draft transactions.
                             </Paragraph>
                         </div>
                     </div>
@@ -885,20 +965,8 @@ export default function DocumentUploadIndex() {
                     </Space>
                 </div>
 
-                {/* Server-computed counts across the whole filtered dataset.
-                    These replace an earlier grid that counted only the rows on
-                    the current page, which under-reported every total. */}
-                <DocumentSummaryCards
-                    summary={summary}
-                    loading={loading}
-                    activeStatus={filters.status}
-                    onSelect={(status) => {
-                        setFilters((prev) => ({ ...prev, status }));
-                        setPage(1);
-                    }}
-                />
-
-                <Card size="small" style={{ ...styles.card, ...styles.filters }}>
+                <div style={{ padding: 12 }}>
+                <Card size="small" style={{ ...styles.card, ...styles.filters }} styles={{ body: { padding: '10px 12px' } }}>
                     <div style={styles.filterInner}>
                         <Input
                             allowClear
@@ -910,7 +978,7 @@ export default function DocumentUploadIndex() {
                                 setPage(1);
                                 fetchDocs({ page: 1 });
                             }}
-                            style={{ width: 280 }}
+                            style={{ width: 260, flex: '1 1 220px', maxWidth: 360 }}
                         />
 
                         <Select
@@ -966,22 +1034,25 @@ export default function DocumentUploadIndex() {
                     </div>
                 </Card>
 
-                <Card size="small" style={styles.card}>
-                    {isMobile ? (
+                <div style={{ ...styles.card, border: `1px solid ${token.colorBorderSecondary}`, overflow: 'hidden' }}>
+                    {loading && documentRows.length === 0 ? (
+                        <div aria-busy="true">
+                            <DocumentsSkeleton isMobile={isMobile} token={token} />
+                        </div>
+                    ) : isMobile ? (
                         <>
                             <List
-                                loading={loading}
+                                loading={loading && documentRows.length > 0}
                                 dataSource={documentRows}
                                 locale={{ emptyText: 'No documents found.' }}
                                 renderItem={(record) => {
                                     const next = primaryAction(record);
                                     return (
                                         <List.Item style={{ padding: '8px 0' }}>
-                                            <Card size="small" style={{ width: '100%' }}>
+                                            <Card size="small" style={{ width: '100%', borderRadius: 0 }} styles={{ body: { padding: 12 } }}>
                                                 <Space direction="vertical" size={10} style={{ width: '100%' }}>
                                                     <div>
                                                         <Text strong>{record.label || 'Untitled Document'}</Text>
-                                                        <Text type="secondary" style={{ display: 'block', fontSize: 12 }}>{record.original_name || '-'}</Text>
                                                     </div>
                                                     <Space wrap size={6}>
                                                         <Tag color={STATUS_COLORS[record.status] || 'default'}>
@@ -995,7 +1066,7 @@ export default function DocumentUploadIndex() {
                                                     <Space wrap>
                                                         <Tooltip title={next.reason}>
                                                             <span>
-                                                                <Button type="primary" icon={next.icon} disabled={next.disabled} onClick={next.onClick}>
+                                                                <Button type={next.primary ? 'primary' : 'default'} icon={next.icon} disabled={next.disabled} onClick={next.onClick}>
                                                                     {next.label}
                                                                 </Button>
                                                             </span>
@@ -1040,9 +1111,29 @@ export default function DocumentUploadIndex() {
                         <Table
                             size="small"
                             rowKey="public_id"
-                            loading={loading}
+                            loading={loading && documentRows.length > 0}
                             dataSource={documentRows}
                             columns={columns}
+                            sticky
+                            scroll={{ x: 900 }}
+                            onRow={(record) => ({
+                                onClick: (event) => {
+                                    if (event.target.closest('button,a,input,textarea,.ant-dropdown-trigger,.ant-select,.ant-picker')) return;
+                                    if (record.extraction) openReviewWorkspace(record);
+                                    else setPreviewDoc(record);
+                                },
+                                style: { cursor: 'pointer' },
+                            })}
+                            locale={{
+                                emptyText: (
+                                    <div style={{ padding: 28 }}>
+                                        <Text type="secondary">No documents match these filters.</Text>
+                                        <div style={{ marginTop: 10 }}>
+                                            <Button type="primary" icon={<PlusOutlined />} onClick={() => setUploadOpen(true)}>Upload Document</Button>
+                                        </div>
+                                    </div>
+                                ),
+                            }}
                             pagination={{
                                 current: page,
                                 pageSize,
@@ -1056,6 +1147,9 @@ export default function DocumentUploadIndex() {
                             }}
                         />
                     )}
+                </div>
+
+                </div>
                 </Card>
 
                 <UploadModal
@@ -1278,6 +1372,8 @@ function DocumentReviewDrawer({
     const party = getExtractedParty(normalized, payload);
     const totals = asObject(normalized?.totals);
     const totalsSource = Object.keys(totals).length ? totals : normalized;
+    // Server-resolved: the document's own currency, or the tenant's base currency.
+    const currency = data?.extraction?.currency || data?.currency || null;
     const missingFields = asArray(data?.missing_fields);
     const warnings = asArray(data?.warnings);
     const reviewSchema = asArray(data?.review_schema).filter((field) => field && typeof field === 'object' && !Array.isArray(field));
@@ -1435,10 +1531,8 @@ function DocumentReviewDrawer({
                             <Card size="small" title="Document Details" style={styles.card}>
                                 <Descriptions size="small" column={3}>
                                     <Descriptions.Item label="Label">{safeDisplay(document.label)}</Descriptions.Item>
-                                    <Descriptions.Item label="Original File">{safeDisplay(document.original_name)}</Descriptions.Item>
                                     <Descriptions.Item label="Status">{humanize(document.status || '-')}</Descriptions.Item>
                                     <Descriptions.Item label="Uploaded">{document.created_at ? dayjs(document.created_at).format('DD MMM YYYY, HH:mm') : '-'}</Descriptions.Item>
-                                    <Descriptions.Item label="File Size">{fileSize(document.size)}</Descriptions.Item>
                                     <Descriptions.Item label="Notes">{safeDisplay(document.notes)}</Descriptions.Item>
                                 </Descriptions>
                             </Card>
@@ -1466,19 +1560,19 @@ function DocumentReviewDrawer({
                                             : '-'}
                                     </Descriptions.Item>
                                     <Descriptions.Item label="Subtotal">
-                                        {money(pickValue(totalsSource, ['subtotal', 'sub_total']))}
+                                        {money(pickValue(totalsSource, ['subtotal', 'sub_total']), currency)}
                                     </Descriptions.Item>
                                     <Descriptions.Item label="Discount">
-                                        {money(pickValue(totalsSource, ['discount_amount', 'discount']))}
+                                        {money(pickValue(totalsSource, ['discount_amount', 'discount']), currency)}
                                     </Descriptions.Item>
                                     <Descriptions.Item label="Tax">
-                                        {money(pickValue(totalsSource, ['tax_amount', 'tax']))}
+                                        {money(pickValue(totalsSource, ['tax_amount', 'tax']), currency)}
                                     </Descriptions.Item>
                                     <Descriptions.Item label="Total">
-                                        {money(pickValue(totalsSource, ['grand_total', 'total', 'total_amount']))}
+                                        {money(pickValue(totalsSource, ['grand_total', 'total', 'total_amount']), currency)}
                                     </Descriptions.Item>
                                     <Descriptions.Item label="Amount Due">
-                                        {money(pickValue(totalsSource, ['amount_due', 'balance_due']))}
+                                        {money(pickValue(totalsSource, ['amount_due', 'balance_due']), currency)}
                                     </Descriptions.Item>
                                 </Descriptions>
                             </Card>
@@ -1568,7 +1662,7 @@ function DocumentReviewDrawer({
                                         const values = form.getFieldsValue();
                                         const { total } = recalcLines(values.lines || []);
 
-                                        return <Text strong>Total: {money(values.total || total)}</Text>;
+                                        return <Text strong>Total: {money(values.total || total, currency)}</Text>;
                                     }}
                                 </Form.Item>
                             </Card>
@@ -1897,10 +1991,8 @@ function ExtractionModal({ doc, data, loading, styles, onClose }) {
                     <Card size="small" title="Document Details" style={styles.card}>
                         <Descriptions size="small" column={3}>
                             <Descriptions.Item label="Label">{safeDisplay(document.label)}</Descriptions.Item>
-                            <Descriptions.Item label="Original File">{safeDisplay(document.original_name)}</Descriptions.Item>
                             <Descriptions.Item label="Document Type">{humanize(document.document_type || normalized.document_type || 'unknown')}</Descriptions.Item>
                             <Descriptions.Item label="Uploaded">{document.created_at ? dayjs(document.created_at).format('DD MMM YYYY, HH:mm') : '-'}</Descriptions.Item>
-                            <Descriptions.Item label="File Size">{fileSize(document.size)}</Descriptions.Item>
                             <Descriptions.Item label="Notes">{safeDisplay(document.notes)}</Descriptions.Item>
                         </Descriptions>
                     </Card>

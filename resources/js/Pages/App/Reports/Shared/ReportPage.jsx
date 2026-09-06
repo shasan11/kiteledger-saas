@@ -629,15 +629,6 @@ export default function ReportPage() {
                     reportKey={reportKey}
                     reportTitle={title}
                     filters={generatedFilters || filters}
-                    columns={state.data?.columns || []}
-                    rows={state.data?.rows || []}
-                    totals={state.data?.totals || {}}
-                    summaryCards={state.data?.summary || []}
-                    metadata={{
-                      currency: state.data?.currency?.code || page.props.defaultCurrency?.code || '',
-                      branch: currentBranchLabel,
-                      generated_at: generatedAt,
-                    }}
                     disabled={!hasGenerated || state.loading || filtersDirty}
                   />
                 )}

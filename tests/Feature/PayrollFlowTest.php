@@ -8,6 +8,7 @@ use App\Models\Branch;
 use App\Models\ChartOfAccount;
 use App\Models\Currency;
 use App\Models\PayrollPeriod;
+use App\Models\PayrollPayment;
 use App\Models\PayrollSetting;
 use App\Models\SalaryHistory;
 use App\Models\SalaryStructure;
@@ -71,7 +72,7 @@ class PayrollFlowTest extends TestCase
         $service->generate($period, null, [$employee->id], $actor);
     }
 
-    public function test_generate_auto_prepares_payroll_account_salary_structure_and_attendance(): void
+    public function test_generate_auto_prepares_setup_but_blocks_when_attendance_is_missing(): void
     {
         [$actor, $employee, $period] = $this->payrollBase();
 
@@ -83,9 +84,15 @@ class PayrollFlowTest extends TestCase
         ]);
 
         $service = app(PayrollService::class);
-        $payroll = $service->generate($period, $period->branch_id, [$employee->id], $actor);
+        $preview = $service->preview($period, $period->branch_id, [$employee->id]);
+        $this->assertSame(1, $preview['skipped_employee_count']);
+        try {
+            $service->generate($period, $period->branch_id, [$employee->id], $actor);
+            $this->fail('Generation should require complete attendance.');
+        } catch (ValidationException $exception) {
+            $this->assertStringContainsString('attendance is incomplete', $exception->getMessage());
+        }
 
-        $this->assertSame(1, $payroll->payslips()->count());
         $this->assertNotNull($employee->fresh()->payroll_account_id);
         $this->assertDatabaseHas('salary_structures', [
             'employee_id' => $employee->id,
@@ -95,8 +102,9 @@ class PayrollFlowTest extends TestCase
         $this->assertDatabaseHas('attendance_summaries', [
             'employee_id' => $employee->id,
             'payroll_period_id' => $period->id,
-            'payable_days' => '31.00',
+            'payable_days' => '0.00',
         ]);
+        $this->assertDatabaseCount('payrolls', 0);
     }
 
     public function test_process_creates_accrual_and_pay_creates_payment_voucher(): void
@@ -130,12 +138,18 @@ class PayrollFlowTest extends TestCase
 
         $this->assertNotNull($payroll->journal_voucher_id);
         $this->assertNull($payroll->payment_journal_voucher_id);
+        $this->assertDatabaseHas('journal_voucher_lines', [
+            'journal_voucher_id' => $payroll->journal_voucher_id,
+            'account_id' => $employee->fresh()->payroll_account_id,
+            'credit' => '30000.000000',
+        ]);
 
         $payroll->forceFill(['source_account_id' => $bank->id])->save();
         $payroll = $service->transition($payroll->fresh(), 'paid', 'pay', $actor);
 
         $this->assertNotNull($payroll->payment_journal_voucher_id);
         $this->assertSame('paid', $payroll->status);
+        $this->assertSame(1, PayrollPayment::query()->where('payroll_id', $payroll->id)->where('status', 'paid')->count());
     }
 
     private function payrollBase(): array

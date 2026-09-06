@@ -550,11 +550,6 @@ export default function Quotations(props) {
         })}
         anchorFilters={[
           {
-            key: 'all',
-            label: 'All',
-            params: {},
-          },
-          {
             key: 'approved',
             label: 'Approved',
             params: { approved: true },
@@ -565,7 +560,7 @@ export default function Quotations(props) {
             params: { approved: false },
           },
         ]}
-        defaultAnchorKey="all"
+        defaultAnchorKey="approved"
         anchorSyncWithHash
       />
     </AuthenticatedLayout>

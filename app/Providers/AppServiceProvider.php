@@ -109,6 +109,7 @@ use App\Support\Branding;
 use App\Support\Installer\FroidenDatabaseManager;
 use App\Support\Installer\FroidenEnvironmentManager;
 use App\Support\Installer\FroidenInstalledFileManager;
+use App\Support\Money\CurrencyFormatter;
 use Froiden\LaravelInstaller\Controllers\DatabaseController as PackageDatabaseController;
 use Froiden\LaravelInstaller\Controllers\FinalController as PackageFinalController;
 use Froiden\LaravelInstaller\Controllers\PermissionsController as PackagePermissionsController;
@@ -124,6 +125,10 @@ class AppServiceProvider extends ServiceProvider
     public function register(): void
     {
         $this->ensureWritableStorage();
+
+        // Scoped, not singleton: the resolved base currency belongs to the
+        // tenant handling the current request or job, never to the process.
+        $this->app->scoped(CurrencyFormatter::class);
 
         $this->app->bind(
             InstalledFileManager::class,

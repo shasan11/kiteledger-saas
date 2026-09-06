@@ -52,7 +52,9 @@ class InstallerRecoveryTest extends TestCase
 
         $this->get('/install/recover')
             ->assertOk()
-            ->assertSee('partially installed')
+            ->assertDontSee('Installation Recovery')
+            ->assertDontSee('partially installed')
+            ->assertDontSee('Database configuration')
             ->assertSee('Reset installer lock and continue installation');
 
         $this->post('/install/recover')->assertRedirect('/install');
@@ -106,7 +108,7 @@ class InstallerRecoveryTest extends TestCase
         $this->assertTrue(InstalledState::hasUsableDatabaseConfig());
     }
 
-    public function test_tenant_domain_middleware_returns_clear_error_when_database_is_unavailable(): void
+    public function test_tenant_domain_middleware_does_not_expose_database_details_when_database_is_unavailable(): void
     {
         InstalledState::mark();
         config([
@@ -127,7 +129,9 @@ class InstallerRecoveryTest extends TestCase
         );
 
         $this->assertSame(503, $response->getStatusCode());
-        $this->assertStringContainsString('Database configuration is invalid', $response->getContent());
+        $this->assertStringNotContainsString('Database configuration is invalid', $response->getContent());
+        $this->assertStringNotContainsString('Installation', $response->getContent());
+        $this->assertStringContainsString('Service temporarily unavailable', $response->getContent());
     }
 
     public function test_first_boot_creates_environment_and_unique_app_key(): void

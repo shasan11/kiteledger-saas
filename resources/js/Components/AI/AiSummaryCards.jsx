@@ -1,13 +1,23 @@
 import { Card, Col, Row, Statistic } from 'antd';
+import { displayMoney, formatNumber } from '@/utils/money';
 
-function formatValue(value, format) {
-    if (format === 'money') {
-        return `NPR ${Number(value || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+/**
+ * The server sends each card as a raw value plus, for money, the string it
+ * already rendered in the tenant's currency. That string wins: it is the same
+ * figure the answer text quotes, and it carries the tenant's own symbol and
+ * decimal places rather than one assumed here.
+ */
+function cardValue(card) {
+    if (card?.format === 'money' || card?.formatted) {
+        return displayMoney(card.formatted, card.value, card.currency_display);
     }
-    return Number.isFinite(Number(value)) ? Number(value).toLocaleString() : value;
+
+    const numeric = Number(card?.value);
+
+    return Number.isFinite(numeric) ? formatNumber(numeric, Number.isInteger(numeric) ? 0 : 2) : card?.value;
 }
 
-export default function AiSummaryCards({ cards = [] }) {
+export default function AiSummaryCards({ cards = [], currency = null }) {
     if (!Array.isArray(cards) || cards.length === 0) return null;
 
     return (
@@ -17,7 +27,7 @@ export default function AiSummaryCards({ cards = [] }) {
                     <Card size="small" style={{ borderRadius: 8 }} styles={{ body: { padding: 12 } }}>
                         <Statistic
                             title={card.label}
-                            value={formatValue(card.value, card.format)}
+                            value={cardValue({ ...card, currency_display: currency })}
                             /* Tabular numerals keep figures aligned across
                                cards and stop digits shifting as values update. */
                             valueStyle={{

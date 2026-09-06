@@ -385,23 +385,6 @@ export default function Attendance({ auth }) {
             </Row>
           </Card>
 
-          <Row gutter={[10, 10]}>
-            {statItems.map(({ label, value, color, icon }) => (
-              <Col xs={12} sm={8} md={4} key={label}>
-                <Card bordered={false} style={{ borderRadius: 10 }} styles={{ body: { padding: '10px 14px' } }}>
-                  <Space size={10} align="center">
-                    <span style={{ color, fontSize: 18 }}>{icon}</span>
-                    <Statistic
-                      title={label}
-                      value={value}
-                      valueStyle={{ fontSize: 18, fontWeight: 700 }}
-                    />
-                  </Space>
-                </Card>
-              </Col>
-            ))}
-          </Row>
-
           <Card bordered={false} style={{ borderRadius: 12 }} styles={{ body: { padding: 0 } }}>
             <Table
               rowKey="id"

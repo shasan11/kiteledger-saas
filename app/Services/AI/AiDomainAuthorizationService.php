@@ -21,6 +21,11 @@ class AiDomainAuthorizationService
             'PayableQueryTool' => ['purchase.purchase_bill.view', 'reports.purchase.view', 'reports.financial.view'],
             'SalesQueryTool' => ['sales.invoice.view', 'reports.sales.view'],
             'PurchaseQueryTool' => ['purchase.purchase_bill.view', 'reports.purchase.view'],
+            'OperationalQueryTool' => [
+                'crm.leads.view', 'crm.lead.view', 'crm.deals.view', 'crm.deal.view',
+                'crm.view', 'crm.manage', 'crm.*',
+                'project.project.view', 'project.task.view', 'project.view', 'project.*',
+            ],
             'ReportQueryTool' => ['reports.view', 'reports.financial.view', 'reports.sales.view', 'reports.purchase.view', 'reports.inventory.view', 'reports.tax.view'],
             default => [],
         };

@@ -43,6 +43,10 @@ class AiSettingsController extends Controller
             'editable' => false,
             'message' => 'AI provider settings are managed by the central administrator.',
             'readiness' => app(AiReadinessService::class)->evaluate(),
+            // Operator-facing health rows. Gated by the same settings-view
+            // permission as the rest of this payload, so infrastructure detail
+            // never reaches an ordinary user.
+            'health' => app(AiReadinessService::class)->dashboard(),
         ]);
     }
 

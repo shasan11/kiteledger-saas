@@ -11,6 +11,7 @@ use App\Services\AI\AiSettingsService;
 use App\Services\AI\Copilot\CopilotException;
 use App\Services\AI\Copilot\CopilotOrchestrator;
 use App\Services\AI\Copilot\CopilotRequestFactory;
+use App\Services\AI\Copilot\CopilotStreamEmitter;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Crypt;
@@ -19,13 +20,17 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 use Throwable;
 
 /**
- * Server-Sent Events progress for Copilot V2.
+ * Server-Sent Events for Copilot V2.
  *
- * Streams *stage* events rather than token deltas. The stages correspond to
- * real orchestration boundaries — routing, tool execution, retrieval — so the
- * progress a user sees reflects what the server is actually doing rather than a
- * decorative animation. Token-level streaming is a separate concern and would
- * conflict with deterministic tool execution, which has no partial output.
+ * Emits both *stage* events (real orchestration boundaries — routing, data
+ * retrieval, answer composition) and *delta* events carrying the model's text
+ * as it is produced, so the first words reach the user without waiting for the
+ * complete answer. Deterministic tool execution has no partial output, which is
+ * exactly what the stages cover: the user sees what the server is doing while
+ * the figures are being computed, then sees the explanation stream in.
+ *
+ * The terminal `answer` event always carries the complete structured response,
+ * so a client that ignores deltas entirely still renders correctly.
  */
 final class CopilotStreamController extends Controller
 {
@@ -51,6 +56,8 @@ final class CopilotStreamController extends Controller
         if (! $this->settings->streamEnabled()
             || ! config('ai.copilot.streaming_enabled', false)
             || ! $this->settings->copilotV2Enabled()) {
+            // 422 with this code is the client's signal to retry on the plain
+            // JSON endpoint rather than surfacing an error to the user.
             return response()->json([
                 'ok' => false,
                 'message' => 'Streaming is not enabled.',
@@ -63,6 +70,7 @@ final class CopilotStreamController extends Controller
             'conversation_id' => 'nullable|string|max:2048',
             'context_type' => ['nullable', 'string', Rule::in(['auto', 'general', 'sales', 'purchase', 'inventory', 'accounting', 'reports', 'contacts'])],
             'context_payload' => 'nullable|array',
+            'cache' => 'nullable|boolean',
         ]);
 
         $conversation = $this->resolveConversation($data['conversation_id'] ?? null, $user, trim((string) $data['message']));
@@ -78,14 +86,25 @@ final class CopilotStreamController extends Controller
                 flush();
             };
 
-            $emit('stage', ['stage' => 'understanding', 'label' => 'Understanding your request']);
+            $emitter = new class($emit) implements CopilotStreamEmitter
+            {
+                public function __construct(private readonly \Closure $emit) {}
+
+                public function stage(string $stage, string $label): void
+                {
+                    ($this->emit)('stage', ['stage' => $stage, 'label' => $label]);
+                }
+
+                public function delta(string $text): void
+                {
+                    ($this->emit)('delta', ['text' => $text]);
+                }
+            };
 
             try {
                 $copilotRequest = $this->requests->make($request, $data, $conversation);
 
-                $emit('stage', ['stage' => 'working', 'label' => 'Checking your permitted business data']);
-
-                $outcome = $this->orchestrator->handle($copilotRequest);
+                $outcome = $this->orchestrator->handle($copilotRequest, $emitter);
 
                 if ($outcome->failed()) {
                     $emit('error', [
@@ -95,8 +114,6 @@ final class CopilotStreamController extends Controller
 
                     return;
                 }
-
-                $emit('stage', ['stage' => 'composing', 'label' => 'Preparing your answer']);
 
                 $debug = $this->orchestrator->canViewTrace($copilotRequest) && config('ai.copilot.trace_enabled', true)
                     ? $outcome->trace->toArray()

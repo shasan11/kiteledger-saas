@@ -44,6 +44,9 @@ class PayslipLineController extends BaseCrudApiController
 
         if ($data['source'] === 'payslip_manual_deduction') {
             $data['type'] = 'deduction';
+            if (empty($data['component_id'])) {
+                abort(422, 'Choose a deduction component so accounting knows which payable account to use.');
+            }
         }
 
         return response()->json(app(PayrollService::class)->addPayslipLine(

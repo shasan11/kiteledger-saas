@@ -26,7 +26,7 @@ class SalaryStructureLine extends Model
     protected function casts(): array
     {
         return [
-            'amount' => 'decimal:2',
+            'amount' => 'decimal:6',
             'percentage' => 'decimal:4',
             'active' => 'boolean',
         ];

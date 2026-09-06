@@ -104,7 +104,25 @@ export default function Settings({ groups, activeGroup, aiReadiness = null }) {
     const settings = groups[section] || [];
     const hydrated = useRef({ section: null, signature: null });
     const awaitingServer = useRef(false);
+    const dirtyRef = useRef(false);
+    const processingRef = useRef(false);
     const serverSignature = useMemo(() => JSON.stringify(settings.map(({ key, value, preview_url, has_secret, updated_at }) => ({ key, value, preview_url, has_secret, updated_at }))), [settings]);
+
+    const setDirtyState = (value) => {
+        dirtyRef.current = value;
+        setDirty(value);
+    };
+
+    const setProcessingState = (value) => {
+        processingRef.current = value;
+        setProcessing(value);
+    };
+
+    useEffect(() => {
+        if (activeGroup && activeGroup !== section && !dirtyRef.current) {
+            setSection(activeGroup);
+        }
+    }, [activeGroup, section]);
 
     useEffect(() => {
         const sectionChanged = hydrated.current.section !== section;
@@ -114,19 +132,19 @@ export default function Settings({ groups, activeGroup, aiReadiness = null }) {
         form.setFieldsValue(Object.fromEntries(settings.map((item) => [item.key, initialValue(item)])));
         hydrated.current = { section, signature: serverSignature };
         awaitingServer.current = false;
-        setDirty(false);
+        setDirtyState(false);
         setChangedKeys(new Set());
     }, [section, serverSignature]);
 
     useEffect(() => {
         const block = (event) => {
-            if (!dirty) return;
+            if (!dirtyRef.current || processingRef.current || awaitingServer.current) return;
             event.preventDefault();
             event.returnValue = '';
         };
         window.addEventListener('beforeunload', block);
         return () => window.removeEventListener('beforeunload', block);
-    }, [dirty]);
+    }, []);
 
     const filtered = useMemo(() => {
         const term = search.trim().toLowerCase();
@@ -150,7 +168,7 @@ export default function Settings({ groups, activeGroup, aiReadiness = null }) {
 
     const discardChanges = () => {
         form.setFieldsValue(Object.fromEntries(settings.map((item) => [item.key, initialValue(item)])));
-        setDirty(false);
+        setDirtyState(false);
         setChangedKeys(new Set());
         setErrorCount(0);
     };
@@ -190,7 +208,7 @@ export default function Settings({ groups, activeGroup, aiReadiness = null }) {
             keys.push(...Object.keys(dependent));
         }
 
-        setDirty(true);
+        setDirtyState(true);
         setChangedKeys((current) => new Set([...current, ...keys]));
     };
 
@@ -218,9 +236,13 @@ export default function Settings({ groups, activeGroup, aiReadiness = null }) {
         const options = {
             preserveScroll: true,
             forceFormData: hasUpload(values),
-            onStart: () => { setProcessing(true); awaitingServer.current = true; },
+            onStart: () => {
+                setProcessingState(true);
+                awaitingServer.current = true;
+                setDirtyState(false);
+            },
             onSuccess: () => {
-                setDirty(false);
+                setDirtyState(false);
                 setChangedKeys(new Set());
                 setErrorCount(0);
                 clearConfirmation();
@@ -231,6 +253,7 @@ export default function Settings({ groups, activeGroup, aiReadiness = null }) {
             },
             onError: (errors) => {
                 awaitingServer.current = false;
+                setDirtyState(true);
                 setErrorCount(Object.keys(errors).filter((name) => name !== 'confirmation_password').length);
                 Object.entries(errors).forEach(([name, error]) => {
                     const field = name.replace(/^values\./, '');
@@ -238,7 +261,7 @@ export default function Settings({ groups, activeGroup, aiReadiness = null }) {
                 });
                 message.error('Settings could not be saved. Review the highlighted fields.');
             },
-            onFinish: () => setProcessing(false),
+            onFinish: () => setProcessingState(false),
         };
 
         if (hasUpload(values)) {
@@ -264,6 +287,7 @@ export default function Settings({ groups, activeGroup, aiReadiness = null }) {
 
     const changeSection = (group) => {
         const visit = () => {
+            setDirtyState(false);
             setSection(group);
             setChangedKeys(new Set());
             router.get(route('central.settings.index'), { group }, { preserveState: true, replace: true });
@@ -287,7 +311,13 @@ export default function Settings({ groups, activeGroup, aiReadiness = null }) {
                   okText: 'Reset section',
                   okButtonProps: { danger: true },
                   onOk: () =>
-                      router.post(route('central.settings.reset', section), {}, { onSuccess: () => setDirty(false) }),
+                      router.post(route('central.settings.reset', section), {}, {
+                          preserveScroll: true,
+                          onStart: () => { setProcessingState(true); awaitingServer.current = true; setDirtyState(false); },
+                          onSuccess: () => { setDirtyState(false); setChangedKeys(new Set()); },
+                          onError: () => { awaitingServer.current = false; setDirtyState(true); },
+                          onFinish: () => setProcessingState(false),
+                      }),
               });
 
     const confirmSensitive = () =>
@@ -297,15 +327,15 @@ export default function Settings({ groups, activeGroup, aiReadiness = null }) {
                   { confirmation_password: confirmationPassword },
                   {
                       preserveScroll: true,
-                      onStart: () => setProcessing(true),
+                      onStart: () => { setProcessingState(true); awaitingServer.current = true; setDirtyState(false); },
                       onSuccess: () => {
-                          setDirty(false);
+                          setDirtyState(false);
                           setChangedKeys(new Set());
                           clearConfirmation();
                           message.success('Settings reset to defaults.');
                       },
-                      onError: () => message.error('The password was rejected. The reset was not applied.'),
-                      onFinish: () => setProcessing(false),
+                      onError: () => { awaitingServer.current = false; setDirtyState(true); message.error('The password was rejected. The reset was not applied.'); },
+                      onFinish: () => setProcessingState(false),
                   },
               )
             : submit(confirmation.values, confirmationPassword);

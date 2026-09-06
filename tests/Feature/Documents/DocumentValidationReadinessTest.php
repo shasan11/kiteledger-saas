@@ -117,15 +117,18 @@ class DocumentValidationReadinessTest extends TestCase
             'description' => 'Corrected widget',
             'quantity' => 3,
             'rate' => 125,
-            'amount' => 375,
+            'tax_amount' => 15,
+            'amount' => 999,
         ]]);
 
         $this->assertSame(4, $result['line_values_applied']);
+        $this->assertContains('lines.0.amount', $result['ignored']);
         $extraction = $doc->fresh()->extraction;
         $this->assertSame('Corrected widget', $extraction->structured_json['lines'][0]['description']);
         $this->assertSame('Widget', $extraction->structured_json['lines'][0]['original_values']['description']);
         $this->assertSame(3, $extraction->normalized_json['lines'][0]['quantity']);
-        $this->assertSame(375, $extraction->normalized_json['lines'][0]['amount']);
+        $this->assertSame(390.0, (float) $extraction->normalized_json['lines'][0]['amount']);
+        $this->assertSame(15.0, (float) $extraction->structured_json['fields']['totals.tax_total']['value']);
     }
 
     public function test_unknown_fields_are_ignored_rather_than_written(): void
@@ -214,13 +217,43 @@ class DocumentValidationReadinessTest extends TestCase
                     'description' => 'Corrected service',
                     'quantity' => 2,
                     'rate' => 50,
+                    'tax_amount' => 5,
                     'amount' => 100,
                 ]],
             ])
             ->assertOk()
-            ->assertJsonPath('corrections.line_values_applied', 4);
+            ->assertJsonPath('corrections.line_values_applied', 4)
+            ->assertJsonPath('corrections.ignored.0', 'lines.0.amount');
 
         $this->assertSame('Corrected service', $doc->fresh()->extraction->normalized_json['lines'][0]['description']);
+        $extraction = $doc->fresh()->extraction;
+        $this->assertSame(105.0, (float) $extraction->normalized_json['lines'][0]['amount']);
+        $this->assertSame(5.0, (float) $extraction->structured_json['fields']['totals.tax_total']['value']);
+    }
+
+    public function test_only_discount_and_tax_totals_can_be_edited(): void
+    {
+        $doc = $this->makeDocument();
+
+        $result = app(DocumentReviewService::class)->applyCorrections($doc, [
+            'totals.subtotal' => 999,
+            'totals.shipping' => 50,
+            'totals.grand_total' => 999,
+            'totals.discount_total' => 10,
+            'totals.tax_total' => 5,
+        ]);
+
+        $this->assertSame(2, $result['applied']);
+        $this->assertContains('totals.subtotal', $result['ignored']);
+        $this->assertContains('totals.shipping', $result['ignored']);
+        $this->assertContains('totals.grand_total', $result['ignored']);
+
+        $fields = $doc->fresh()->extraction->structured_json['fields'];
+        $this->assertSame(200.0, (float) $fields['totals.subtotal']['value']);
+        $this->assertSame(10.0, (float) $fields['totals.discount_total']['value']);
+        $this->assertSame(5.0, (float) $fields['totals.tax_total']['value']);
+        $this->assertSame(195.0, (float) $fields['totals.grand_total']['value']);
+        $this->assertSame('derived', $fields['totals.grand_total']['origin']);
     }
 
     // ---------- Deterministic validation (Milestone 4) ----------

@@ -10,6 +10,7 @@ use App\Services\AI\Copilot\CopilotContext;
 use App\Services\AI\Copilot\CopilotException;
 use App\Services\AI\Copilot\Metrics\CopilotMetricCatalog;
 use App\Services\AI\Copilot\Metrics\MetricQuery;
+use App\Support\Money\CurrencyFormatter;
 use Illuminate\Support\Facades\Log;
 use Throwable;
 
@@ -33,6 +34,7 @@ final class CopilotToolExecutor
         private readonly CopilotMetricCatalog $catalog,
         private readonly AiPermissionService $permissions,
         private readonly AiUsageLogger $usage,
+        private readonly CurrencyFormatter $currency,
     ) {}
 
     public function executeMetric(CopilotContext $context, MetricQuery $query): CopilotToolResult
@@ -135,6 +137,8 @@ final class CopilotToolExecutor
             $metrics = ['value' => $raw['value']];
         }
 
+        $currencyCode = $hasCurrency ? $this->currency->base()->code : null;
+
         return new CopilotToolResult(
             tool: $definition->name,
             verified: true,
@@ -142,7 +146,7 @@ final class CopilotToolExecutor
             rows: $rows,
             metrics: $metrics,
             appliedFilters: $query->appliedFilters(),
-            currency: $hasCurrency ? $context->baseCurrency : null,
+            currency: $currencyCode,
             dateFrom: $query->dateFrom,
             dateTo: $query->dateTo,
             branchScope: $context->branchId ? 'Selected branch' : 'All permitted branches',
@@ -152,7 +156,48 @@ final class CopilotToolExecutor
             asOf: now(),
             sourceLabel: $label,
             summary: is_string($raw['summary'] ?? null) ? $raw['summary'] : null,
+            displayMetrics: $this->displayMetrics($metrics, $currencyCode),
         );
+    }
+
+    /**
+     * Renders each metric for reading.
+     *
+     * A metric on a currency-bearing tool is money unless its key says
+     * otherwise ("invoice_count", "days_overdue"), so counts that travel
+     * alongside a balance keep their plain form.
+     *
+     * @param  array<string, mixed>  $metrics
+     * @return array<string, string>
+     */
+    private function displayMetrics(array $metrics, ?string $currencyCode): array
+    {
+        $display = [];
+
+        foreach ($metrics as $key => $value) {
+            if (! is_numeric($value)) {
+                continue;
+            }
+
+            $display[$key] = $currencyCode !== null && ! $this->isPlainCount((string) $key)
+                ? $this->currency->format($value, $currencyCode)
+                : $this->currency->plain($value);
+        }
+
+        return $display;
+    }
+
+    private function isPlainCount(string $key): bool
+    {
+        $key = strtolower($key);
+
+        foreach (['count', 'quantity', 'qty', 'days', 'percent', 'ratio', 'number_of', 'units'] as $hint) {
+            if (str_contains($key, $hint)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**

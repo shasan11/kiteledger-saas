@@ -54,15 +54,12 @@ export default function AiCopilotStyles() {
             }
 
             .kl-prompt-card {
-                transition: border-color 160ms ease-out, transform 160ms ease-out, box-shadow 160ms ease-out;
+                transition: background-color 140ms ease-out, color 140ms ease-out;
                 cursor: pointer;
             }
 
             .kl-prompt-card:hover {
-                border-color: ${token.colorPrimaryBorderHover};
-                box-shadow: ${token.boxShadowTertiary};
-                /* Transform only - animating size would reflow the grid. */
-                transform: translateY(-2px);
+                background: ${token.colorFillQuaternary} !important;
             }
 
             .kl-prompt-card:focus-visible {

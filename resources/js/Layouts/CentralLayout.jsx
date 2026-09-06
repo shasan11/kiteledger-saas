@@ -11,6 +11,7 @@ import {
     CreditCardOutlined,
     DashboardOutlined,
     DatabaseOutlined,
+    DownOutlined,
     FileImageOutlined,
     FileTextOutlined,
     GlobalOutlined,
@@ -666,7 +667,7 @@ export default function CentralLayout({
                 <Header className="central-topbar">
                     <div className="central-topbar__left">
                         <Button
-                            className="central-desktop-toggle"
+                            className="central-desktop-toggle central-topbar__toggle"
                             type="text"
                             icon={
                                 collapsed ? (
@@ -678,7 +679,7 @@ export default function CentralLayout({
                             onClick={() => setCollapsed((value) => !value)}
                         />
                         <Button
-                            className="central-mobile-toggle"
+                            className="central-mobile-toggle central-topbar__toggle"
                             type="text"
                             icon={<MenuOutlined />}
                             onClick={() => setMobileOpen(true)}
@@ -694,61 +695,62 @@ export default function CentralLayout({
                     >
                         <SearchOutlined />
                         <span>
-                            Search customers, invoices, tickets, content...
+                            Search customers, invoices, tickets...
                         </span>
                         <span className="central-topbar__shortcut">Ctrl K</span>
                     </button>
                     <div className="central-topbar__actions">
-                    <Button
-                        type="text"
-                        shape="circle"
-                        icon={<HeartOutlined style={{ color: "#059669" }} />}
-                        aria-label="System health"
-                        onClick={() => router.visit(route("central.dashboard"))}
-                    />
-                    <Button
-                        type="text"
-                        shape="circle"
-                        icon={<QuestionCircleOutlined />}
-                        aria-label="Support"
-                        onClick={() =>
-                            router.visit(route("central.support.tickets.index"))
-                        }
-                    />
-                    <Popover
-                        placement="bottomRight"
-                        trigger="click"
-                        content={notifications}
-                    >
-                        <Badge
-                            count={notificationData.unread}
-                            overflowCount={99}
+                        <Button
+                            type="text"
+                            shape="circle"
+                            icon={<HeartOutlined />}
+                            aria-label="System health"
+                            onClick={() => router.visit(route("central.dashboard"))}
+                        />
+                        <Button
+                            type="text"
+                            shape="circle"
+                            icon={<QuestionCircleOutlined />}
+                            aria-label="Support"
+                            onClick={() =>
+                                router.visit(route("central.support.tickets.index"))
+                            }
+                        />
+                        <Popover
+                            placement="bottomRight"
+                            trigger="click"
+                            content={notifications}
                         >
-                            <Button
-                                type="text"
-                                shape="circle"
-                                icon={<BellOutlined />}
-                                aria-label="Notifications"
-                            />
-                        </Badge>
-                    </Popover>
-                    <Dropdown
-                        menu={{ items: profileItems }}
-                        trigger={["click"]}
-                        placement="bottomRight"
-                    >
-                        <button className="central-profile">
-                            <Avatar size={34}>
-                                {initials(user.name || user.email)}
-                            </Avatar>
-                            <span className="central-profile__copy">
-                                <strong>{user.name || "Administrator"}</strong>
-                                <span>
-                                    {humanize(user.role || "super admin")}
+                            <Badge
+                                count={notificationData.unread}
+                                overflowCount={99}
+                            >
+                                <Button
+                                    type="text"
+                                    shape="circle"
+                                    icon={<BellOutlined />}
+                                    aria-label="Notifications"
+                                />
+                            </Badge>
+                        </Popover>
+                        <Dropdown
+                            menu={{ items: profileItems }}
+                            trigger={["click"]}
+                            placement="bottomRight"
+                        >
+                            <button className="central-profile" aria-label="Open account menu">
+                                <Avatar size={32}>
+                                    {initials(user.name || user.email)}
+                                </Avatar>
+                                <span className="central-profile__copy">
+                                    <strong>{user.name || "Administrator"}</strong>
+                                    <span>
+                                        {humanize(user.role || "super admin")}
+                                    </span>
                                 </span>
-                            </span>
-                        </button>
-                    </Dropdown>
+                                <DownOutlined className="central-profile__chevron" />
+                            </button>
+                        </Dropdown>
                     </div>
                 </Header>
                 <Content className="central-content">

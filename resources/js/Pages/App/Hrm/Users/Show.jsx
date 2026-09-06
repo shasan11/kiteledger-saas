@@ -44,7 +44,6 @@ import {
   MoreOutlined,
   PhoneOutlined,
   PlusOutlined,
-  SafetyCertificateOutlined,
   TeamOutlined,
   TrophyOutlined,
   UserOutlined,
@@ -91,20 +90,6 @@ function Meta({ label, value }) {
       <Text type="secondary" style={{ fontSize: 12 }}>{label}</Text>
       <div>{value ?? '-'}</div>
     </div>
-  );
-}
-
-function Metric({ label, value, icon, color = '#1677ff' }) {
-  return (
-    <Card className="emp-show__metric" bordered={false}>
-      <Space align="start">
-        <span className="emp-show__metric-icon" style={{ background: `${color}18`, color }}>{icon}</span>
-        <div>
-          <Text type="secondary" style={{ fontSize: 12 }}>{label}</Text>
-          <strong>{value}</strong>
-        </div>
-      </Space>
-    </Card>
   );
 }
 
@@ -677,11 +662,13 @@ export default function EmployeeShow({ auth, id }) {
         .emp-show__meta { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
         .emp-show__main { padding: 10px; display: flex; flex-direction: column; gap: 16px; min-width: 0; }
         .emp-show__card.ant-card { border-radius: 6px; box-shadow: none; }
-        .emp-show__metric.ant-card { border-radius: 6px; box-shadow: none; }
-        .emp-show__metric .ant-card-body { min-height: 88px; display: flex; align-items: center; }
-        .emp-show__metric strong { display: block; font-size: 20px; font-weight: 650; color: #10233f; }
-        .emp-show__metric-icon { width: 32px; height: 32px; border-radius: 8px; display: grid; place-items: center; flex-shrink: 0; }
         .emp-show .ant-table-thead > tr > th { background: #e9eff7; font-weight: 700; }
+        .emp-show__documents { display: grid; grid-template-columns: repeat(auto-fill, minmax(245px, 1fr)); gap: 12px; }
+        .emp-show__document { border: 1px solid #e3e9f2; border-radius: 8px; padding: 14px; background: #fff; }
+        .emp-show__document-title { font-weight: 650; color: #10233f; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .emp-show__document-meta { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 14px; }
+        .emp-show__document-meta span { display: block; color: #64748b; font-size: 11px; margin-bottom: 2px; }
+        .emp-show__document-actions { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-top: 14px; padding-top: 12px; border-top: 1px solid #edf1f5; }
         @media (max-width: 992px) { .emp-show__body { grid-template-columns: 1fr; } .emp-show__rail { min-height: auto; border-right: 0; border-bottom: 1px solid #d9e1ec; } }
       `}</style>
 
@@ -744,14 +731,6 @@ export default function EmployeeShow({ auth, id }) {
               {!user.active && (
                 <Alert showIcon type="warning" message="This employee is inactive." />
               )}
-
-              {/* Metric cards */}
-              <Row gutter={[12, 12]}>
-                <Col xs={24} sm={12} lg={6}><Metric label="Leave Applications" value={leaveApps.length} icon={<CalendarOutlined />} color="#fa8c16" /></Col>
-                <Col xs={24} sm={12} lg={6}><Metric label="Pending Leaves"     value={pendingLeaves}    icon={<AuditOutlined />}    color="#faad14" /></Col>
-                <Col xs={24} sm={12} lg={6}><Metric label="Payslips"           value={payslips.length} icon={<FileTextOutlined />} color="#1677ff" /></Col>
-                <Col xs={24} sm={12} lg={6}><Metric label="Awards"             value={awardHists.length} icon={<TrophyOutlined />} color="#52c41a" /></Col>
-              </Row>
 
               {/* Personal & Employment details */}
               <SectionCard title="Employee Details">
@@ -840,13 +819,53 @@ export default function EmployeeShow({ auth, id }) {
               <SectionCard
                 title={
                   <Space>
-                    <SafetyCertificateOutlined />Documents
+                    Documents
                     {expiredDocs > 0 && <Tooltip title={`${expiredDocs} expired`}><Tag color="red"><WarningOutlined /> {expiredDocs} Expired</Tag></Tooltip>}
                   </Space>
                 }
-                extra={<Button size="small" type="primary" icon={<PlusOutlined />} onClick={() => openChildEditor('document')}>Add</Button>}
+                extra={<Button size="small" type="primary" onClick={() => openChildEditor('document')}>Add document</Button>}
               >
-                <Table size="small" rowKey="id" pagination={false} dataSource={documents} columns={cols.document} />
+                {documents.length ? (
+                  <div className="emp-show__documents">
+                    {documents.map((document) => {
+                      const expiry = document.expiry_date ? dayjs(document.expiry_date) : null;
+                      const expired = expiry?.isBefore(dayjs(), 'day');
+                      const expiringSoon = !expired && expiry?.diff(dayjs(), 'day') <= 30;
+                      const validity = !expiry
+                        ? <Tag> No expiry</Tag>
+                        : expired
+                          ? <Tag color="error">Expired</Tag>
+                          : expiringSoon
+                            ? <Tag color="warning">Expires soon</Tag>
+                            : <Tag color="success">Valid</Tag>;
+
+                      return (
+                        <div className="emp-show__document" key={document.id}>
+                          <Space size={6} wrap>
+                            <div className="emp-show__document-title">{document.title || 'Untitled document'}</div>
+                            {document.document_type ? <Tag>{document.document_type}</Tag> : null}
+                          </Space>
+                          <div className="emp-show__document-meta">
+                            <div><span>ISSUED</span>{fmtDate(document.issue_date)}</div>
+                            <div><span>EXPIRY</span>{fmtDate(document.expiry_date)}</div>
+                          </div>
+                          <div className="emp-show__document-actions">
+                            {validity}
+                            <Space size={4}>
+                              {document.file_path ? <Button size="small" type="link" href={document.file_path} target="_blank">Open</Button> : null}
+                              <Button size="small" onClick={() => openChildEditor('document', document)}>Edit</Button>
+                              <Button size="small" danger onClick={() => deleteChild('document', document)}>Delete</Button>
+                            </Space>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No documents added for this employee yet.">
+                    <Button type="primary" onClick={() => openChildEditor('document')}>Add document</Button>
+                  </Empty>
+                )}
               </SectionCard>
 
               {/* Onboarding / Offboarding */}

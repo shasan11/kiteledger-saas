@@ -19,7 +19,6 @@ import {
     theme,
 } from 'antd';
 import {
-    RobotOutlined,
     SendOutlined,
     StopOutlined,
     ReloadOutlined,
@@ -37,8 +36,43 @@ import AiSourceCards from '@/Components/AI/AiSourceCards';
 import AiCopilotStyles from '@/Components/AI/AiCopilotStyles';
 import AiWelcome from '@/Components/AI/AiWelcome';
 import AiThinkingIndicator from '@/Components/AI/AiThinkingIndicator';
+import CopilotMark from '@/Components/AI/CopilotMark';
 
 const { Title, Text } = Typography;
+
+const UUID_PATTERN = /\b[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}\b/gi;
+const AI_HEALTH_CACHE_TTL_MS = 60_000;
+
+function conversationLabel(item) {
+    const title = String(item?.title || '').replace(UUID_PATTERN, '').trim();
+    return title || 'Untitled conversation';
+}
+
+function readHealthCache(key) {
+    if (typeof window === 'undefined') return null;
+
+    try {
+        const cached = JSON.parse(window.sessionStorage.getItem(key) || 'null');
+        if (!cached?.value || Date.now() - Number(cached.savedAt || 0) > AI_HEALTH_CACHE_TTL_MS) {
+            window.sessionStorage.removeItem(key);
+            return null;
+        }
+
+        return cached.value;
+    } catch {
+        return null;
+    }
+}
+
+function writeHealthCache(key, value) {
+    if (typeof window === 'undefined') return;
+
+    try {
+        window.sessionStorage.setItem(key, JSON.stringify({ savedAt: Date.now(), value }));
+    } catch {
+        // Storage may be disabled or full. The network path remains authoritative.
+    }
+}
 
 
 function hasAnyPermission(perms = [], required = []) {
@@ -46,7 +80,7 @@ function hasAnyPermission(perms = [], required = []) {
     return required.some((r) => perms.includes(r));
 }
 
-async function postCopilotStream(payload, signal, onStage) {
+async function postCopilotStream(payload, signal, onStage, onDelta) {
     const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
     const response = await fetch('/api/ai/chat/stream', {
         method: 'POST',
@@ -71,7 +105,9 @@ async function postCopilotStream(payload, signal, onStage) {
         }
         const error = new Error(errorPayload.message || 'Streaming is unavailable.');
         error.code = errorPayload.code || 'AI_STREAM_UNAVAILABLE';
-        error.allowFallback = !response.ok && [404, 406, 415, 422, 501].includes(response.status);
+        // Nothing was orchestrated yet, so retrying on the JSON endpoint cannot
+        // duplicate a tool call or an action proposal.
+        error.allowFallback = true;
         error.status = response.status;
         throw error;
     }
@@ -81,6 +117,10 @@ async function postCopilotStream(payload, signal, onStage) {
     let buffer = '';
     let answer = null;
     let streamError = null;
+    // Tracks whether the server actually began producing this turn. Once it
+    // has, a retry could re-run tools or re-create a pending action, so the
+    // JSON fallback is refused from that point on.
+    let started = false;
 
     const consume = (frame) => {
         let event = 'message';
@@ -99,7 +139,14 @@ async function postCopilotStream(payload, signal, onStage) {
         }
 
         if (event === 'stage') onStage(payloadData.label || 'Working on your request');
-        if (event === 'answer') answer = payloadData;
+        if (event === 'delta' && payloadData.text) {
+            started = true;
+            onDelta?.(payloadData.text);
+        }
+        if (event === 'answer') {
+            started = true;
+            answer = payloadData;
+        }
         if (event === 'error') streamError = payloadData;
     };
 
@@ -116,11 +163,18 @@ async function postCopilotStream(payload, signal, onStage) {
     if (streamError) {
         const error = new Error(streamError.message || 'Copilot could not complete the request.');
         error.code = streamError.code || 'AI_PROVIDER_ERROR';
+        // A server-reported failure is the real answer for this turn; repeating
+        // it over the JSON endpoint would only fail the same way.
+        error.allowFallback = false;
         throw error;
     }
     if (!answer) {
         const error = new Error('Copilot ended the response before an answer was received.');
         error.code = 'AI_STREAM_INCOMPLETE';
+        // A stream cut off before any output — a buffering proxy, a dropped
+        // connection — is safe to retry as plain JSON. One that died mid-answer
+        // is not: the turn already ran on the server.
+        error.allowFallback = !started;
         throw error;
     }
 
@@ -128,67 +182,34 @@ async function postCopilotStream(payload, signal, onStage) {
 }
 
 function HeaderTitle({ token, compact = false }) {
-    const iconSize = compact ? 36 : 42;
-    const radius = token.borderRadiusXL || token.borderRadiusLG + 4;
+    const iconSize = compact ? 30 : 34;
 
     return (
-        <Space size={compact ? 10 : 12} align="center" style={{ minWidth: 0 }}>
-            <div
-                aria-hidden="true"
-                style={{
-                    width: iconSize,
-                    height: iconSize,
-                    flex: `0 0 ${iconSize}px`,
-                    borderRadius: radius,
-                    background: token.colorPrimary,
-                    border: `1px solid ${token.colorPrimaryBorderHover}`,
-                    boxShadow: token.boxShadowTertiary || token.boxShadowSecondary,
-                    color: token.colorTextLightSolid,
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    fontSize: compact ? 17 : 19,
-                }}
-            >
-                <RobotOutlined />
-            </div>
+        <Space size={9} align="center" style={{ minWidth: 0 }}>
+            <CopilotMark size={iconSize} />
 
             <div style={{ minWidth: 0 }}>
-                {!compact && (
-                    <Text
-                        type="secondary"
-                        style={{
-                            display: 'block',
-                            marginBottom: 2,
-                            fontSize: 10,
-                            fontWeight: 700,
-                            letterSpacing: '0.1em',
-                            lineHeight: 1.2,
-                            textTransform: 'uppercase',
-                        }}
-                    >
-                        AI workspace
-                    </Text>
-                )}
                 <Title
                     level={5}
                     style={{
                         margin: 0,
-                        fontSize: compact ? 15 : 17,
-                        fontWeight: 750,
-                        lineHeight: 1.2,
+                        fontSize: compact ? 14 : 15,
+                        fontWeight: 700,
+                        lineHeight: 1.15,
                         letterSpacing: '-0.015em',
                     }}
                 >
                     KiteLedger Copilot
                 </Title>
-                <Text
-                    type="secondary"
-                    ellipsis
-                    style={{ display: 'block', marginTop: 2, fontSize: 12, lineHeight: 1.35 }}
-                >
-                    Your permission-aware business assistant
-                </Text>
+                {!compact && (
+                    <Text
+                        type="secondary"
+                        ellipsis
+                        style={{ display: 'block', marginTop: 1, fontSize: 11, lineHeight: 1.25 }}
+                    >
+                        Business assistant
+                    </Text>
+                )}
             </div>
         </Space>
     );
@@ -197,32 +218,69 @@ function HeaderTitle({ token, compact = false }) {
 function PremiumCopilotStyles({ token }) {
     return (
         <style>{`
+            .kl-premium-page * {
+                box-sizing: border-box;
+            }
+
             .kl-premium-page .ant-card-head {
                 border-bottom-color: ${token.colorBorderSecondary};
             }
 
+            .kl-premium-page .kl-premium-main,
+            .kl-premium-page .kl-premium-sidebar {
+                box-shadow: none !important;
+            }
+
+            .kl-premium-page .kl-premium-main > .ant-card-body {
+                min-height: 0;
+                height: 100%;
+                display: flex;
+                flex-direction: column;
+            }
+
             .kl-premium-page .kl-sidebar-chat {
-                transition: background-color 160ms ease, border-color 160ms ease, transform 160ms ease;
+                transition: background-color 140ms ease, border-color 140ms ease;
+            }
+
+            .kl-premium-page .kl-premium-sidebar .ant-list-items {
+                display: grid;
+                gap: 4px;
+            }
+
+            .kl-premium-page .kl-recent-conversations {
+                scrollbar-width: thin;
+                scrollbar-color: transparent transparent;
+                scrollbar-gutter: stable;
+            }
+
+            .kl-premium-page .kl-recent-conversations:hover {
+                scrollbar-color: ${token.colorFillSecondary} transparent;
+            }
+
+            .kl-premium-page .kl-recent-conversations::-webkit-scrollbar {
+                width: 6px;
+            }
+
+            .kl-premium-page .kl-recent-conversations::-webkit-scrollbar-thumb {
+                background: transparent;
+                border-radius: 999px;
+            }
+
+            .kl-premium-page .kl-recent-conversations:hover::-webkit-scrollbar-thumb {
+                background: ${token.colorFillSecondary};
             }
 
             .kl-premium-page .kl-sidebar-chat:hover {
                 background: ${token.colorFillTertiary} !important;
-                border-color: ${token.colorBorder} !important;
-                transform: translateY(-1px);
             }
 
             .kl-premium-page .kl-message-bubble {
-                transition: border-color 160ms ease, box-shadow 160ms ease;
-            }
-
-            .kl-premium-page .kl-message-bubble:hover {
-                border-color: ${token.colorBorder} !important;
-                box-shadow: ${token.boxShadowTertiary} !important;
+                transition: border-color 140ms ease, background-color 140ms ease;
             }
 
             .kl-premium-page .kl-message-bubble .kl-copy-button {
-                opacity: .58;
-                transition: opacity 160ms ease, background-color 160ms ease;
+                opacity: .42;
+                transition: opacity 140ms ease;
             }
 
             .kl-premium-page .kl-message-bubble:hover .kl-copy-button {
@@ -232,10 +290,11 @@ function PremiumCopilotStyles({ token }) {
             .kl-premium-page .kl-chat-scroll {
                 scrollbar-width: thin;
                 scrollbar-color: ${token.colorFillSecondary} transparent;
+                overscroll-behavior: contain;
             }
 
             .kl-premium-page .kl-chat-scroll::-webkit-scrollbar {
-                width: 8px;
+                width: 6px;
             }
 
             .kl-premium-page .kl-chat-scroll::-webkit-scrollbar-thumb {
@@ -247,7 +306,7 @@ function PremiumCopilotStyles({ token }) {
                 padding: 0 !important;
                 background: transparent !important;
                 box-shadow: none !important;
-                line-height: 1.6 !important;
+                line-height: 1.5 !important;
             }
 
             .kl-premium-page .kl-composer-textarea,
@@ -259,9 +318,84 @@ function PremiumCopilotStyles({ token }) {
                 background: transparent !important;
             }
 
+            .kl-premium-page .kl-ai-preparing-mark {
+                position: relative;
+                width: 72px;
+                height: 72px;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                border-radius: 22px;
+                background: ${token.colorPrimaryBg};
+                border: 1px solid ${token.colorPrimaryBorder};
+                box-shadow: 0 14px 36px ${token.colorPrimaryBgHover};
+                animation: kl-ai-preparing-float 2.4s ease-in-out infinite;
+            }
+
+            .kl-premium-page .kl-ai-preparing-mark::before,
+            .kl-premium-page .kl-ai-preparing-mark::after {
+                content: '';
+                position: absolute;
+                inset: -8px;
+                border-radius: 28px;
+                border: 1px solid ${token.colorPrimaryBorder};
+                opacity: 0;
+                animation: kl-ai-preparing-ring 2.2s ease-out infinite;
+            }
+
+            .kl-premium-page .kl-ai-preparing-mark::after {
+                animation-delay: 1.1s;
+            }
+
+            .kl-premium-page .kl-ai-preparing-dots {
+                display: inline-flex;
+                align-items: center;
+                gap: 5px;
+                height: 10px;
+            }
+
+            .kl-premium-page .kl-ai-preparing-dots span {
+                width: 5px;
+                height: 5px;
+                border-radius: 999px;
+                background: ${token.colorPrimary};
+                animation: kl-ai-preparing-dot 1.2s ease-in-out infinite;
+            }
+
+            .kl-premium-page .kl-ai-preparing-dots span:nth-child(2) { animation-delay: 140ms; }
+            .kl-premium-page .kl-ai-preparing-dots span:nth-child(3) { animation-delay: 280ms; }
+
+            @keyframes kl-ai-preparing-float {
+                0%, 100% { transform: translateY(0); }
+                50% { transform: translateY(-4px); }
+            }
+
+            @keyframes kl-ai-preparing-ring {
+                0% { transform: scale(.86); opacity: .52; }
+                75%, 100% { transform: scale(1.18); opacity: 0; }
+            }
+
+            @keyframes kl-ai-preparing-dot {
+                0%, 60%, 100% { transform: translateY(0); opacity: .35; }
+                30% { transform: translateY(-3px); opacity: 1; }
+            }
+
+            @media (prefers-reduced-motion: reduce) {
+                .kl-premium-page .kl-ai-preparing-mark,
+                .kl-premium-page .kl-ai-preparing-mark::before,
+                .kl-premium-page .kl-ai-preparing-mark::after,
+                .kl-premium-page .kl-ai-preparing-dots span {
+                    animation: none !important;
+                }
+            }
+
             @media (max-width: 767px) {
-                .kl-premium-page .ant-card-head {
-                    padding-inline: 14px;
+                .kl-premium-page .kl-premium-main > .ant-card-body {
+                    height: 100%;
+                }
+
+                .kl-premium-page .kl-copy-button {
+                    opacity: .72 !important;
                 }
             }
         `}</style>
@@ -270,22 +404,22 @@ function PremiumCopilotStyles({ token }) {
 
 function StatusBadge({ health, healthLoading, healthError, aiReady }) {
     const sharedStyle = {
-        height: 26,
+        height: 22,
         marginInlineEnd: 0,
-        paddingInline: 10,
+        paddingInline: 8,
         borderRadius: 999,
         display: 'inline-flex',
         alignItems: 'center',
         gap: 4,
         fontSize: 11,
         fontWeight: 650,
-        lineHeight: '24px',
+        lineHeight: '20px',
     };
 
     if (healthLoading) {
         return (
             <Tag icon={<Spin size="small" />} bordered={false} style={sharedStyle}>
-                Checking
+                Preparing
             </Tag>
         );
     }
@@ -311,7 +445,7 @@ function StatusBadge({ health, healthLoading, healthError, aiReady }) {
                 bordered={false}
                 style={sharedStyle}
             >
-                Copilot ready
+                Ready
             </Tag>
         );
     }
@@ -325,6 +459,50 @@ function StatusBadge({ health, healthLoading, healthError, aiReady }) {
         >
             Not ready
         </Tag>
+    );
+}
+
+function PreparingAi({ token }) {
+    return (
+        <div
+            role="status"
+            aria-live="polite"
+            aria-label="Preparing AI"
+            style={{
+                width: '100%',
+                minHeight: '100%',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 18,
+                padding: 24,
+                textAlign: 'center',
+            }}
+        >
+            <div className="kl-ai-preparing-mark" aria-hidden="true">
+                <CopilotMark size={44} />
+            </div>
+
+            <div>
+                <Space size={8} align="center">
+                    <Title level={4} style={{ margin: 0, fontSize: 18, letterSpacing: '-0.02em' }}>
+                        Preparing AI
+                    </Title>
+                    <span className="kl-ai-preparing-dots" aria-hidden="true">
+                        <span />
+                        <span />
+                        <span />
+                    </span>
+                </Space>
+                <Text
+                    type="secondary"
+                    style={{ display: 'block', maxWidth: 420, marginTop: 7, lineHeight: 1.55 }}
+                >
+                    Loading your secure business context and capabilities…
+                </Text>
+            </div>
+        </div>
     );
 }
 
@@ -378,35 +556,31 @@ function MessageBubble({ message, token, isMobile, onCopy, onFollowup, actionSta
     const isUser = message.role === 'user';
     const isAssistant = message.role === 'assistant';
     const isSystem = message.role === 'system';
-    const radius = token.borderRadiusXL || token.borderRadiusLG + 6;
-
     const bubbleStyle = {
         width: 'fit-content',
-        maxWidth: isMobile ? '100%' : isUser ? 'min(680px, 80%)' : 'min(880px, 92%)',
-        borderRadius: isUser
-            ? `${radius}px ${radius}px 6px ${radius}px`
-            : `${radius}px ${radius}px ${radius}px 6px`,
-        padding: isMobile ? '12px 13px' : '14px 16px',
+        maxWidth: isMobile ? '96%' : isUser ? 'min(720px, 76%)' : 'min(920px, 90%)',
+        borderRadius: 8,
+        padding: isMobile ? '8px 0' : '10px 0',
         whiteSpace: 'pre-wrap',
         wordBreak: 'break-word',
-        lineHeight: 1.68,
+        lineHeight: 1.52,
         fontSize: 14,
-        boxShadow: token.boxShadowTertiary,
-        border: `1px solid ${token.colorBorderSecondary}`,
-        background: token.colorBgElevated,
+        boxShadow: 'none',
+        border: 0,
+        background: 'transparent',
         color: token.colorText,
     };
 
     if (isUser) {
         bubbleStyle.background = token.colorPrimaryBg;
         bubbleStyle.color = token.colorText;
-        bubbleStyle.border = `1px solid ${token.colorPrimaryBorder}`;
-        bubbleStyle.boxShadow = token.boxShadowTertiary;
+        bubbleStyle.padding = isMobile ? '9px 11px' : '10px 13px';
     }
 
     if (isSystem) {
         bubbleStyle.background = token.colorWarningBg;
         bubbleStyle.border = `1px solid ${token.colorWarningBorder}`;
+        bubbleStyle.padding = isMobile ? '9px 11px' : '10px 13px';
         bubbleStyle.color = token.colorText;
     }
 
@@ -414,34 +588,32 @@ function MessageBubble({ message, token, isMobile, onCopy, onFollowup, actionSta
         <List.Item
             style={{
                 border: 'none',
-                padding: isMobile ? '7px 0' : '10px 0',
+                padding: isMobile ? '4px 0' : '5px 0',
                 display: 'flex',
                 alignItems: 'flex-start',
                 justifyContent: isUser ? 'flex-end' : 'flex-start',
-                gap: 10,
+                gap: 8,
             }}
         >
             {!isUser && (
                 <div
                     aria-hidden="true"
                     style={{
-                        width: 30,
-                        height: 30,
+                        width: 26,
+                        height: 26,
                         marginTop: 2,
-                        flex: '0 0 30px',
-                        borderRadius: token.borderRadiusLG,
+                        flex: '0 0 26px',
+                        borderRadius: 7,
                         display: 'inline-flex',
                         alignItems: 'center',
                         justifyContent: 'center',
                         color: isAssistant ? token.colorPrimary : token.colorWarning,
-                        background: isAssistant ? token.colorPrimaryBg : token.colorWarningBg,
-                        border: `1px solid ${
-                            isAssistant ? token.colorPrimaryBorder : token.colorWarningBorder
-                        }`,
-                        boxShadow: token.boxShadowTertiary,
+                        background: isAssistant ? 'transparent' : token.colorWarningBg,
+                        border: 0,
+                        boxShadow: 'none',
                     }}
                 >
-                    {isAssistant ? <RobotOutlined /> : <ExclamationCircleOutlined />}
+                    {isAssistant ? <CopilotMark size={26} /> : <ExclamationCircleOutlined />}
                 </div>
             )}
 
@@ -449,7 +621,7 @@ function MessageBubble({ message, token, isMobile, onCopy, onFollowup, actionSta
                 {!isUser && (
                     <div
                         style={{
-                            marginBottom: 8,
+                            marginBottom: 5,
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'space-between',
@@ -491,8 +663,8 @@ function MessageBubble({ message, token, isMobile, onCopy, onFollowup, actionSta
                 {isAssistant && (
                     <div
                         style={{
-                            marginTop: 12,
-                            paddingTop: 9,
+                            marginTop: 8,
+                            paddingTop: 6,
                             borderTop: `1px solid ${token.colorBorderSecondary}`,
                             display: 'flex',
                             alignItems: 'center',
@@ -538,13 +710,30 @@ export default function Assistant() {
     const page = usePage();
     const permissions = page.props?.auth?.permissions || [];
     const canBypass = !!page.props?.auth?.canBypassPermissions;
+    const healthCacheKey = useMemo(() => {
+        const userId = page.props?.auth?.user?.id || 'guest';
+        const branchId = page.props?.branchContext?.selectedBranchId
+            || page.props?.auth?.currentBranchId
+            || 'all';
+        const fiscalYearId = page.props?.branchContext?.current_fiscal_year_id || 'current';
+        const company = page.props?.tenantContext?.companyName || 'tenant';
+
+        return `kiteledger:ai-health:v1:${encodeURIComponent(company)}:${userId}:${branchId}:${fiscalYearId}`;
+    }, [
+        page.props?.auth?.user?.id,
+        page.props?.auth?.currentBranchId,
+        page.props?.branchContext?.selectedBranchId,
+        page.props?.branchContext?.current_fiscal_year_id,
+        page.props?.tenantContext?.companyName,
+    ]);
+    const initialHealth = useMemo(() => readHealthCache(healthCacheKey), [healthCacheKey]);
 
     const canUseAi =
         canBypass || hasAnyPermission(permissions, ['ai.view', 'ai.use', 'ai.chat', 'ai.manage']);
 
-    const [health, setHealth] = useState(null);
+    const [health, setHealth] = useState(initialHealth);
     const [healthError, setHealthError] = useState(null);
-    const [healthLoading, setHealthLoading] = useState(true);
+    const [healthLoading, setHealthLoading] = useState(!initialHealth);
 
     const [messages, setMessages] = useState([]);
     const [input, setInput] = useState('');
@@ -558,6 +747,14 @@ export default function Assistant() {
     const [historyError, setHistoryError] = useState(null);
     const [lastFailedPrompt, setLastFailedPrompt] = useState(null);
     const [progressLabel, setProgressLabel] = useState('Working on your request');
+    /*
+     * Text streamed so far for the turn in flight. Kept out of `messages` on
+     * purpose: the final `answer` event carries the authoritative structured
+     * response (cards, tables, evidence, warnings), and that — not the
+     * accumulated deltas — is what gets committed to the transcript. The
+     * streamed copy exists only so the user sees words appear immediately.
+     */
+    const [streamedText, setStreamedText] = useState('');
 
     const abortRef = useRef(null);
     const scrollRef = useRef(null);
@@ -613,30 +810,6 @@ export default function Assistant() {
         return 'KiteLedger Copilot is not ready.';
     }, [health, healthError, healthLoading, aiReady, canUseAi]);
 
-    const activeContext = useMemo(() => {
-        const branch = page.props?.branchContext || {};
-        const tenantContext = page.props?.tenantContext || {};
-        const fiscalYear = branch.current_fiscal_year || null;
-        const parts = [
-            tenantContext.companyName ? `Tenant: ${tenantContext.companyName}` : null,
-            `Page: ${(page.url || '/').split('?')[0]}`,
-            branch.selectedBranchName
-                ? `Branch: ${branch.selectedBranchName}`
-                : branch.selectedBranchId
-                  ? `Branch ID: ${branch.selectedBranchId}`
-                  : 'Branch: all permitted branches',
-        ];
-
-        if (fiscalYear?.name || fiscalYear?.label) {
-            parts.push(`Fiscal year: ${fiscalYear.name || fiscalYear.label}`);
-        }
-        const from = fiscalYear?.start_date || fiscalYear?.from_date || fiscalYear?.starts_at;
-        const to = fiscalYear?.end_date || fiscalYear?.to_date || fiscalYear?.ends_at;
-        if (from || to) parts.push(`Date range: ${from || 'start'} to ${to || 'present'}`);
-
-        return parts.filter(Boolean).join(' · ');
-    }, [page.props, page.url]);
-
     const refreshConversations = useCallback(async () => {
         if (!canUseAi) return;
 
@@ -654,113 +827,114 @@ export default function Assistant() {
     }, [canUseAi]);
 
     const styles = useMemo(() => {
-        const radius = token.borderRadiusXL || token.borderRadiusLG + 6;
-        const premiumShadow = token.boxShadowSecondary || token.boxShadow;
+        const radius = 12;
 
         return {
             page: {
-                padding: isMobile ? 10 : 22,
+                padding: isMobile ? '0 6px 6px' : '0 10px 10px',
                 background: token.colorBgLayout,
-                minHeight: 'calc(100vh - 64px)',
+                height: isMobile ? 'calc(100dvh - 110px)' : 'calc(100dvh - 118px)',
+                minHeight: 360,
+                overflow: 'hidden',
+                display: 'flex',
+                flexDirection: 'column',
             },
             shell: {
                 display: 'grid',
-                gridTemplateColumns: isMobile ? 'minmax(0, 1fr)' : '292px minmax(0, 1fr)',
-                gap: isMobile ? 10 : 18,
+                gridTemplateColumns: isMobile ? 'minmax(0, 1fr)' : '248px minmax(0, 1fr)',
+                gap: 0,
                 alignItems: 'stretch',
                 width: '100%',
-                maxWidth: 1400,
+                maxWidth: 1680,
                 margin: '0 auto',
+                flex: '1 1 auto',
+                minHeight: 0,
             },
             sideCard: {
-                height: 'fit-content',
-                maxHeight: 'calc(100vh - 108px)',
-                borderRadius: radius,
-                border: `1px solid ${token.colorBorderSecondary}`,
-                boxShadow: premiumShadow,
-                position: 'sticky',
-                top: 18,
+                height: '100%',
+                margin: 0,
+                borderRadius: 0,
+                border: 0,
                 overflow: 'hidden',
-                background: token.colorBgContainer,
+                background: token.colorBgLayout,
             },
             mainCard: {
-                borderRadius: radius,
-                border: `1px solid ${token.colorBorderSecondary}`,
-                boxShadow: premiumShadow,
+                height: '100%',
+                borderRadius: isMobile ? 0 : `0 0 ${radius}px 0`,
+                border: 0,
+                borderLeft: isMobile ? 0 : `1px solid ${token.colorBorderSecondary}`,
                 overflow: 'hidden',
                 minWidth: 0,
                 background: token.colorBgContainer,
             },
             chatArea: {
-                minHeight: isMobile ? 430 : 570,
-                maxHeight: isMobile ? 'calc(100vh - 292px)' : 'calc(100vh - 232px)',
+                flex: 1,
+                minHeight: 0,
                 overflowY: 'auto',
-                padding: isMobile ? '14px 12px 18px' : '22px 26px 28px',
-                background: token.colorBgLayout,
-            },
-            composer: {
-                padding: isMobile ? 10 : 14,
-                borderTop: `1px solid ${token.colorBorderSecondary}`,
+                padding: isMobile ? '12px' : '20px 24px',
                 background: token.colorBgContainer,
             },
+            composer: {
+                flex: '0 0 auto',
+                padding: isMobile ? 7 : 9,
+                borderTop: `1px solid ${token.colorBorderSecondary}`,
+                background: token.colorBgContainer,
+                position: 'sticky',
+                bottom: 0,
+                zIndex: 5,
+            },
             composerSurface: {
-                padding: isMobile ? 11 : 12,
-                borderRadius: radius,
+                padding: isMobile ? '8px 9px' : '8px 10px',
+                borderRadius: 8,
                 background: token.colorBgElevated,
                 border: `1px solid ${token.colorBorder}`,
-                boxShadow: token.boxShadowTertiary,
-                transition: 'border-color 160ms ease, box-shadow 160ms ease',
+                transition: 'border-color 140ms ease',
             },
             composerBox: {
                 display: 'flex',
-                flexDirection: isMobile ? 'column' : 'row',
-                alignItems: isMobile ? 'stretch' : 'flex-end',
-                gap: 10,
-            },
-            statBox: {
-                padding: 13,
-                borderRadius: token.borderRadiusLG,
-                background: token.colorPrimaryBg,
-                border: `1px solid ${token.colorPrimaryBorder}`,
+                flexDirection: 'row',
+                alignItems: 'flex-end',
+                gap: 8,
             },
             sidebarSection: {
                 display: 'flex',
                 flexDirection: 'column',
-                gap: 8,
+                gap: 10,
                 width: '100%',
+                height: '100%',
+                minHeight: 0,
+                overflowY: 'auto',
             },
             sectionLabel: {
                 margin: 0,
                 color: token.colorTextTertiary,
-                fontSize: 10,
-                fontWeight: 750,
-                letterSpacing: '0.09em',
-                textTransform: 'uppercase',
+                fontSize: 12,
+                fontWeight: 600,
+                letterSpacing: 0,
             },
             toolbar: {
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'space-between',
-                gap: 8,
-                flexWrap: 'wrap',
+                gap: 7,
                 width: '100%',
+                minWidth: 0,
             },
             toolbarActions: {
                 display: 'flex',
                 alignItems: 'center',
-                justifyContent: isMobile ? 'stretch' : 'flex-end',
-                flexWrap: 'wrap',
-                gap: 7,
-                width: isMobile ? '100%' : 'auto',
+                justifyContent: 'flex-end',
+                gap: 4,
+                width: 'auto',
             },
             compactButton: {
-                flex: isMobile ? '1 1 calc(50% - 8px)' : '0 0 auto',
-                borderRadius: token.borderRadiusLG,
+                borderRadius: 8,
+                paddingInline: isMobile ? 8 : 10,
             },
             emptyState: {
                 width: '100%',
-                maxWidth: 820,
-                minHeight: isMobile ? 390 : 510,
+                maxWidth: 760,
+                minHeight: '100%',
                 margin: '0 auto',
                 display: 'flex',
                 alignItems: 'center',
@@ -776,8 +950,10 @@ export default function Assistant() {
         }
 
         let cancelled = false;
+        const cachedHealth = readHealthCache(healthCacheKey);
 
-        setHealthLoading(true);
+        setHealth(cachedHealth);
+        setHealthLoading(!cachedHealth);
         setHealthError(null);
 
         axios
@@ -785,10 +961,13 @@ export default function Assistant() {
             .then((res) => {
                 if (!cancelled) {
                     setHealth(res.data);
+                    writeHealthCache(healthCacheKey, res.data);
                 }
             })
             .catch((err) => {
                 if (cancelled) return;
+
+                if (cachedHealth) return;
 
                 if (err.response?.status === 403) {
                     setHealthError(err.response.data || { message: 'Permission denied.' });
@@ -807,7 +986,7 @@ export default function Assistant() {
         return () => {
             cancelled = true;
         };
-    }, [canUseAi]);
+    }, [canUseAi, healthCacheKey]);
 
     useEffect(() => {
         refreshConversations();
@@ -844,7 +1023,11 @@ export default function Assistant() {
         setMessages((prev) => [...prev, userMsg]);
         setInput('');
         setSending(true);
-        setProgressLabel('Understanding your request');
+        setStreamedText('');
+        setProgressLabel('Understanding your question');
+
+        const appendStreamedText = (chunk) => setStreamedText((prev) => prev + chunk);
+        const clearStreamedText = () => setStreamedText('');
 
         const controller = new AbortController();
         abortRef.current = controller;
@@ -869,13 +1052,19 @@ export default function Assistant() {
             let responseData;
             if (health?.stream_enabled) {
                 try {
-                    responseData = await postCopilotStream(payload, controller.signal, setProgressLabel);
+                    responseData = await postCopilotStream(
+                        payload,
+                        controller.signal,
+                        setProgressLabel,
+                        appendStreamedText,
+                    );
                 } catch (streamError) {
-                    // Only fall back when the server/proxy rejects streaming
-                    // before orchestration starts. Retrying a broken active
-                    // stream could duplicate tool calls or action proposals.
+                    // Only fall back when the turn had not begun producing
+                    // output. Retrying a stream that already started could
+                    // duplicate tool calls or action proposals.
                     if (!streamError.allowFallback || controller.signal.aborted) throw streamError;
-                    setProgressLabel('Streaming unavailable; preparing the answer normally');
+                    clearStreamedText();
+                    setProgressLabel('Preparing your answer');
                     responseData = (await axios.post('/api/ai/chat', payload, {
                         signal: controller.signal,
                         timeout: requestTimeout,
@@ -912,6 +1101,9 @@ export default function Assistant() {
                     // V2 evidence metadata: lets the user tell a verified live
                     // figure apart from a documentation answer.
                     evidence: responseData?.evidence || null,
+                    // How to write the amounts in the cards and tables above:
+                    // the tenant's own code, symbol and decimal places.
+                    currency: responseData?.currency || null,
                 },
             ]);
         } catch (err) {
@@ -948,6 +1140,7 @@ export default function Assistant() {
         } finally {
             window.clearTimeout(timeoutId);
             setSending(false);
+            setStreamedText('');
             setProgressLabel('Working on your request');
             abortRef.current = null;
         }
@@ -1039,6 +1232,15 @@ export default function Assistant() {
         });
     };
 
+    const removeCurrentConversation = (event) => {
+        if (conversationId) {
+            deleteConversation(event, conversationId);
+            return;
+        }
+
+        clearScreen();
+    };
+
     const patchActionInMessages = (actionId, patch) => {
         setMessages((prev) =>
             prev.map((m) =>
@@ -1104,6 +1306,86 @@ export default function Assistant() {
         }
     };
 
+    const statusLabel = healthLoading
+        ? 'Preparing KiteLedger Copilot'
+        : healthError
+          ? 'Copilot unavailable'
+          : aiReady
+            ? 'Copilot ready'
+            : 'Copilot not ready';
+    const statusColor = healthLoading
+        ? token.colorWarning
+        : healthError
+          ? token.colorError
+          : aiReady
+            ? token.colorSuccess
+            : token.colorWarning;
+    const copilotHeader = (
+        <div style={styles.toolbar}>
+            <HeaderTitle token={token} compact={isMobile} />
+
+            <div style={styles.toolbarActions}>
+                {isMobile ? (
+                    <Tooltip title={statusLabel}>
+                        <span
+                            role="status"
+                            aria-label={statusLabel}
+                            style={{
+                                width: 10,
+                                height: 10,
+                                flex: '0 0 10px',
+                                borderRadius: '50%',
+                                background: statusColor,
+                                boxShadow: `0 0 0 3px ${token.colorFillQuaternary}`,
+                            }}
+                        />
+                    </Tooltip>
+                ) : (
+                    <StatusBadge
+                        health={health}
+                        healthLoading={healthLoading}
+                        healthError={healthError}
+                        aiReady={aiReady}
+                    />
+                )}
+
+                <Button
+                    size="small"
+                    icon={<HistoryOutlined />}
+                    onClick={() => setHistoryOpen(true)}
+                    aria-label="Open conversation history"
+                    style={styles.compactButton}
+                >
+                    {!isMobile && 'History'}
+                </Button>
+
+                <Button
+                    size="small"
+                    type="primary"
+                    icon={<PlusOutlined />}
+                    onClick={newConversation}
+                    aria-label="Start a new conversation"
+                    style={styles.compactButton}
+                >
+                    {!isMobile && 'New'}
+                </Button>
+
+                <Tooltip title={conversationId ? 'Delete this conversation' : 'Clear this conversation'}>
+                    <Button
+                        size="small"
+                        type="text"
+                        danger
+                        icon={<DeleteOutlined />}
+                        aria-label={conversationId ? 'Delete conversation' : 'Clear conversation'}
+                        onClick={removeCurrentConversation}
+                        disabled={!messages.length}
+                        style={{ borderRadius: token.borderRadiusLG }}
+                    />
+                </Tooltip>
+            </div>
+        </div>
+    );
+
     if (!canUseAi) {
         return (
             <AuthenticatedLayout header={<HeaderTitle token={token} />}>
@@ -1122,7 +1404,7 @@ export default function Assistant() {
     }
 
     return (
-        <AuthenticatedLayout header={<HeaderTitle token={token} />}>
+        <AuthenticatedLayout header={copilotHeader}>
             <Head title="KiteLedger Copilot" />
             <AiCopilotStyles />
             <PremiumCopilotStyles token={token} />
@@ -1178,71 +1460,20 @@ export default function Assistant() {
                         <Card
                             className="kl-premium-sidebar"
                             size="small"
+                            bordered={false}
                             style={styles.sideCard}
-                            title={<HeaderTitle token={token} compact />}
                             styles={{
-                                header: { minHeight: 70, paddingInline: 16 },
-                                body: { padding: 14 },
+                                body: { padding: 10, height: '100%', overflow: 'hidden' },
                             }}
                         >
-                            <Space direction="vertical" size={16} style={{ width: '100%' }}>
-                                <Button
-                                    type="primary"
-                                    size="large"
-                                    block
-                                    icon={<PlusOutlined />}
-                                    onClick={newConversation}
-                                    style={{
-                                        height: 44,
-                                        borderRadius: token.borderRadiusLG,
-                                        boxShadow: token.boxShadowTertiary,
-                                        fontWeight: 650,
-                                    }}
-                                >
-                                    New conversation
-                                </Button>
+                            <div className="kl-recent-conversations" style={styles.sidebarSection}>
+                                <Text style={styles.sectionLabel}>Recent conversations</Text>
 
-                                <div style={styles.statBox}>
-                                    <Space direction="vertical" size={8} style={{ width: '100%' }}>
-                                        <div style={styles.toolbar}>
-                                            <Text strong style={{ fontSize: 13 }}>
-                                                Copilot status
-                                            </Text>
-                                            <StatusBadge
-                                                health={health}
-                                                healthLoading={healthLoading}
-                                                healthError={healthError}
-                                                aiReady={aiReady}
-                                            />
-                                        </div>
-                                        <Text type="secondary" style={{ fontSize: 12, lineHeight: 1.55 }}>
-                                            {aiReady
-                                                ? 'Ready to answer using the business data you are allowed to access.'
-                                                : health?.provider_configured === false
-                                                  ? 'Waiting for the shared AI provider configuration.'
-                                                  : 'Checking configuration and permissions.'}
-                                        </Text>
-                                    </Space>
-                                </div>
-
-                                <div style={styles.sidebarSection}>
-                                    <div style={styles.toolbar}>
-                                        <Text style={styles.sectionLabel}>Recent conversations</Text>
-                                        <Button
-                                            size="small"
-                                            type="text"
-                                            onClick={() => setHistoryOpen(true)}
-                                            style={{ paddingInline: 4, fontSize: 12 }}
-                                        >
-                                            View all
-                                        </Button>
-                                    </div>
-
-                                    {conversations.length ? (
+                                {conversations.length ? (
                                         <List
                                             size="small"
                                             split={false}
-                                            dataSource={conversations.slice(0, 5)}
+                                            dataSource={conversations.slice(0, 7)}
                                             renderItem={(item) => {
                                                 const selected = conversationId === item.id;
                                                 return (
@@ -1251,25 +1482,21 @@ export default function Assistant() {
                                                         onClick={() => openConversation(item.id)}
                                                         style={{
                                                             cursor: 'pointer',
-                                                            marginBottom: 5,
-                                                            padding: '10px 11px',
-                                                            borderRadius: token.borderRadiusLG,
-                                                            border: `1px solid ${
-                                                                selected
-                                                                    ? token.colorPrimaryBorder
-                                                                    : token.colorBorderSecondary
-                                                            }`,
+                                                            margin: 0,
+                                                            padding: '9px 10px',
+                                                            borderRadius: 7,
+                                                            border: '1px solid transparent',
                                                             background: selected
                                                                 ? token.colorPrimaryBg
-                                                                : token.colorBgContainer,
+                                                                : 'transparent',
                                                         }}
                                                     >
                                                         <List.Item.Meta
                                                             avatar={
                                                                 <div
                                                                     style={{
-                                                                        width: 28,
-                                                                        height: 28,
+                                                                        width: 24,
+                                                                        height: 24,
                                                                         borderRadius: token.borderRadius,
                                                                         display: 'inline-flex',
                                                                         alignItems: 'center',
@@ -1289,16 +1516,16 @@ export default function Assistant() {
                                                                 <Text
                                                                     strong={selected}
                                                                     ellipsis
-                                                                    style={{ maxWidth: 175, fontSize: 12 }}
+                                                                    style={{ maxWidth: 152, fontSize: 12 }}
                                                                 >
-                                                                    {item.title || 'Untitled conversation'}
+                                                                    {conversationLabel(item)}
                                                                 </Text>
                                                             }
                                                             description={
                                                                 <Text
                                                                     type="secondary"
                                                                     ellipsis
-                                                                    style={{ display: 'block', maxWidth: 175, fontSize: 10 }}
+                                                                    style={{ display: 'block', maxWidth: 152, fontSize: 11 }}
                                                                 >
                                                                     {item.updated_at
                                                                         ? new Date(item.updated_at).toLocaleString()
@@ -1310,10 +1537,10 @@ export default function Assistant() {
                                                 );
                                             }}
                                         />
-                                    ) : (
+                                ) : (
                                         <div
                                             style={{
-                                                padding: '14px 12px',
+                                                padding: '10px 8px',
                                                 borderRadius: token.borderRadiusLG,
                                                 border: `1px dashed ${token.colorBorder}`,
                                                 background: token.colorFillQuaternary,
@@ -1321,125 +1548,32 @@ export default function Assistant() {
                                             }}
                                         >
                                             <Text type="secondary" style={{ fontSize: 12 }}>
-                                                Your recent conversations will appear here.
+                                                Recent chats appear here.
                                             </Text>
                                         </div>
-                                    )}
-                                </div>
-
-                                <div
-                                    style={{
-                                        paddingTop: 12,
-                                        borderTop: `1px solid ${token.colorBorderSecondary}`,
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        gap: 8,
-                                    }}
-                                >
-                                    <CheckCircleOutlined style={{ color: token.colorSuccess }} />
-                                    <Text type="secondary" style={{ fontSize: 11, lineHeight: 1.45 }}>
-                                        Permission-aware access to KiteLedger data
-                                    </Text>
-                                </div>
-                            </Space>
+                                )}
+                            </div>
                         </Card>
                     )}
 
                     <Card
                         className="kl-premium-main"
                         size="small"
+                        bordered={false}
                         style={styles.mainCard}
                         styles={{
                             body: { padding: 0 },
-                            header: {
-                                minHeight: isMobile ? 66 : 74,
-                                paddingInline: isMobile ? 14 : 18,
-                                flexWrap: 'wrap',
-                                gap: 8,
-                                alignItems: 'center',
-                                background: token.colorBgContainer,
-                            },
-                            title: { minWidth: 0, flex: '1 1 280px' },
-                            extra: { marginInlineStart: 0 },
                         }}
-                        title={
-                            <div style={styles.toolbar}>
-                                <div style={{ minWidth: 0 }}>
-                                    <Space size={8} align="center" wrap>
-                                        <Text
-                                            strong
-                                            style={{
-                                                fontSize: isMobile ? 14 : 16,
-                                                letterSpacing: '-0.01em',
-                                            }}
-                                        >
-                                            Copilot workspace
-                                        </Text>
-                                        <Tag
-                                            bordered={false}
-                                            style={{ marginInlineEnd: 0, borderRadius: 999, fontSize: 11 }}
-                                        >
-                                            {messages.length} {messages.length === 1 ? 'message' : 'messages'}
-                                        </Tag>
-                                    </Space>
-                                    {!isMobile && (
-                                        <Text
-                                            type="secondary"
-                                            ellipsis
-                                            style={{ display: 'block', marginTop: 3, fontSize: 12 }}
-                                        >
-                                            Ask, analyse, and take action without leaving KiteLedger
-                                        </Text>
-                                    )}
-                                </div>
-
-                                {isMobile && (
-                                    <StatusBadge
-                                        health={health}
-                                        healthLoading={healthLoading}
-                                        healthError={healthError}
-                                        aiReady={aiReady}
-                                    />
-                                )}
-                            </div>
-                        }
-                        extra={
-                            <div style={styles.toolbarActions}>
-                                <Button
-                                    size="small"
-                                    icon={<HistoryOutlined />}
-                                    onClick={() => setHistoryOpen(true)}
-                                    style={styles.compactButton}
-                                >
-                                    History
-                                </Button>
-
-                                <Button
-                                    size="small"
-                                    icon={<PlusOutlined />}
-                                    onClick={newConversation}
-                                    style={styles.compactButton}
-                                >
-                                    New
-                                </Button>
-
-                                <Tooltip title="Clear this conversation">
-                                    <Button
-                                        size="small"
-                                        type="text"
-                                        danger
-                                        icon={<DeleteOutlined />}
-                                        aria-label="Clear conversation"
-                                        onClick={clearScreen}
-                                        disabled={!messages.length}
-                                        style={{ borderRadius: token.borderRadiusLG }}
-                                    />
-                                </Tooltip>
-                            </div>
-                        }
                     >
-                        <div ref={scrollRef} className="kl-chat-scroll" style={styles.chatArea}>
-                            {messages.length === 0 ? (
+                        <div
+                            ref={scrollRef}
+                            className="kl-chat-scroll"
+                            style={styles.chatArea}
+                            aria-busy={healthLoading || sending}
+                        >
+                            {healthLoading && !health ? (
+                                <PreparingAi token={token} />
+                            ) : messages.length === 0 ? (
                                 <div style={styles.emptyState}>
                                     <AiWelcome
                                         onSelect={send}
@@ -1480,7 +1614,33 @@ export default function Assistant() {
                                 />
                             )}
 
-                            {sending && <AiThinkingIndicator isMobile={isMobile} label={progressLabel} />}
+                            {/*
+                              * Once the answer starts arriving, the progress
+                              * indicator gives way to the text itself. The
+                              * bubble is provisional — the completed turn
+                              * replaces it with the full structured response.
+                              */}
+                            {sending && streamedText ? (
+                                <div className="kl-rise">
+                                    <MessageBubble
+                                        message={{
+                                            id: 'streaming',
+                                            role: 'assistant',
+                                            content: streamedText,
+                                            streaming: true,
+                                        }}
+                                        token={token}
+                                        isMobile={isMobile}
+                                        onCopy={copy}
+                                        onFollowup={send}
+                                        actionStates={actionStates}
+                                        onApprove={approveAction}
+                                        onReject={rejectAction}
+                                    />
+                                </div>
+                            ) : (
+                                sending && <AiThinkingIndicator isMobile={isMobile} label={progressLabel} />
+                            )}
                         </div>
 
                         <div style={styles.composer}>
@@ -1491,11 +1651,13 @@ export default function Assistant() {
                                         value={input}
                                         onChange={(e) => setInput(e.target.value)}
                                         placeholder={
-                                            aiReady
+                                            healthLoading
+                                                ? 'Preparing AI…'
+                                                : aiReady
                                                 ? 'Ask about invoices, cash flow, customers, inventory, reports, or KiteLedger workflows…'
                                                 : notReadyReason || 'KiteLedger Copilot is not ready.'
                                         }
-                                        autoSize={{ minRows: isMobile ? 2 : 1, maxRows: 6 }}
+                                        autoSize={{ minRows: 1, maxRows: isMobile ? 4 : 5 }}
                                         bordered={false}
                                         disabled={!aiReady || sending}
                                         onPressEnter={(e) => {
@@ -1505,13 +1667,13 @@ export default function Assistant() {
                                             }
                                         }}
                                         style={{
-                                            minHeight: isMobile ? 48 : 42,
+                                            minHeight: 36,
                                             resize: 'none',
                                             fontSize: 14,
                                         }}
                                     />
 
-                                    <Space size={8} style={{ width: isMobile ? '100%' : 'auto' }}>
+                                    <Space size={5} style={{ flex: '0 0 auto' }}>
                                         <Tooltip title="Retry the last prompt">
                                             <Button
                                                 icon={<ReloadOutlined />}
@@ -1519,8 +1681,8 @@ export default function Assistant() {
                                                 disabled={sending || !messages.length}
                                                 aria-label="Retry last prompt"
                                                 style={{
-                                                    width: isMobile ? '42%' : 44,
-                                                    height: 44,
+                                                    width: 38,
+                                                    height: 38,
                                                     borderRadius: token.borderRadiusLG,
                                                 }}
                                             />
@@ -1533,13 +1695,13 @@ export default function Assistant() {
                                                 icon={<StopOutlined />}
                                                 onClick={stop}
                                                 style={{
-                                                    width: isMobile ? '58%' : 104,
-                                                    height: 44,
+                                                    width: isMobile ? 40 : 84,
+                                                    height: 38,
                                                     borderRadius: token.borderRadiusLG,
                                                     fontWeight: 650,
                                                 }}
                                             >
-                                                Stop
+                                                {!isMobile && 'Stop'}
                                             </Button>
                                         ) : (
                                             <Button
@@ -1548,52 +1710,27 @@ export default function Assistant() {
                                                 onClick={() => send()}
                                                 disabled={!aiReady || !input.trim()}
                                                 style={{
-                                                    width: isMobile ? '58%' : 104,
-                                                    height: 44,
+                                                    width: isMobile ? 40 : 84,
+                                                    height: 38,
                                                     borderRadius: token.borderRadiusLG,
                                                     boxShadow: token.boxShadowTertiary,
                                                     fontWeight: 650,
                                                 }}
                                             >
-                                                Send
+                                                {!isMobile && 'Send'}
                                             </Button>
                                         )}
                                     </Space>
                                 </div>
 
-                                <div
-                                    style={{
-                                        marginTop: 9,
-                                        paddingTop: 9,
-                                        borderTop: `1px solid ${token.colorBorderSecondary}`,
-                                        display: 'flex',
-                                        justifyContent: 'space-between',
-                                        alignItems: 'center',
-                                        gap: 8,
-                                        flexWrap: 'wrap',
-                                    }}
-                                >
-                                    <Text type="secondary" style={{ fontSize: 11 }}>
-                                        Enter to send · Shift + Enter for a new line
+                                {!isMobile && (
+                                    <Text
+                                        type="secondary"
+                                        style={{ display: 'block', marginTop: 7, fontSize: 11 }}
+                                    >
+                                        Enter send · Shift + Enter newline
                                     </Text>
-
-                                    <Space size={6}>
-                                        <span
-                                            aria-hidden="true"
-                                            style={{
-                                                width: 6,
-                                                height: 6,
-                                                borderRadius: '50%',
-                                                background: aiReady
-                                                    ? token.colorSuccess
-                                                    : token.colorTextQuaternary,
-                                            }}
-                                        />
-                                        <Text type="secondary" style={{ fontSize: 11 }}>
-                                            {activeContext}
-                                        </Text>
-                                    </Space>
-                                </div>
+                                )}
                             </div>
                         </div>
                     </Card>
@@ -1603,10 +1740,10 @@ export default function Assistant() {
                     title={<HeaderTitle token={token} compact />}
                     open={historyOpen}
                     onClose={() => setHistoryOpen(false)}
-                    width={isMobile ? '100%' : 430}
+                    width={isMobile ? '100%' : 380}
                     styles={{
                         header: { borderBottom: `1px solid ${token.colorBorderSecondary}` },
-                        body: { padding: 12 },
+                        body: { padding: 10 },
                     }}
                 >
                     {historyError && (
@@ -1621,7 +1758,7 @@ export default function Assistant() {
                     )}
                     <Text
                         type="secondary"
-                        style={{ display: 'block', margin: '2px 4px 12px', fontSize: 12 }}
+                        style={{ display: 'block', margin: '0 2px 12px', fontSize: 12 }}
                     >
                         Select a conversation to continue where you left off.
                     </Text>
@@ -1636,8 +1773,8 @@ export default function Assistant() {
                                 onClick={() => openConversation(item.id)}
                                 style={{
                                     cursor: 'pointer',
-                                    marginBottom: 7,
-                                    padding: '11px 12px',
+                                    marginBottom: 4,
+                                    padding: '8px 9px',
                                     borderRadius: token.borderRadiusLG,
                                     border: `1px solid ${token.colorBorderSecondary}`,
                                 }}
@@ -1656,8 +1793,8 @@ export default function Assistant() {
                                     avatar={
                                         <div
                                             style={{
-                                                width: 34,
-                                                height: 34,
+                                                width: 28,
+                                                height: 28,
                                                 borderRadius: token.borderRadiusLG,
                                                 display: 'inline-flex',
                                                 alignItems: 'center',
@@ -1670,7 +1807,7 @@ export default function Assistant() {
                                             <HistoryOutlined />
                                         </div>
                                     }
-                                    title={item.title || 'Untitled conversation'}
+                                    title={conversationLabel(item)}
                                     description={
                                         item.updated_at
                                             ? new Date(item.updated_at).toLocaleString()

@@ -48,11 +48,23 @@ class MediaStorageService
         }
 
         if ($this->existsOnConfiguredDisk($path)) {
-            return Storage::disk($this->disk())->url($path);
+            $disk = $this->disk();
+
+            // The public disk is tenant-suffixed by Stancl while the URL
+            // configured on that disk is based on APP_URL (the central host).
+            // Returning that absolute URL makes a tenant profile image get
+            // requested from the central domain, whose storage root does not
+            // contain the tenant's file. A relative URL keeps the request on
+            // the active tenant host so the tenant storage route can serve it.
+            if ($disk === 'public') {
+                return '/storage/'.ltrim($path, '/');
+            }
+
+            return Storage::disk($disk)->url($path);
         }
 
         if (Storage::disk('public')->exists($path)) {
-            return Storage::disk('public')->url($path);
+            return '/storage/'.ltrim($path, '/');
         }
 
         return null;

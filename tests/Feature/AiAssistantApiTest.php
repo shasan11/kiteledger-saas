@@ -124,9 +124,12 @@ class AiAssistantApiTest extends TestCase
             );
         });
 
+        // 504, not 422: a provider timeout is an upstream gateway failure, and
+        // AiProviderException::httpStatus() has mapped it that way since the
+        // status table was introduced. The assertion here predated that.
         $this->actingAs($user)
             ->postJson('/api/ai/chat', ['message' => 'hi'])
-            ->assertStatus(422)
+            ->assertStatus(504)
             ->assertJsonPath('ok', false)
             ->assertJsonPath('code', 'AI_TIMEOUT');
 

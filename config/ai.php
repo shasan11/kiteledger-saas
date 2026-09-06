@@ -15,17 +15,18 @@ return [
         'engine' => env('AI_COPILOT_ENGINE', 'neuron'),
 
         /*
-         * Copilot V2 orchestration. Off by default: V2 runs alongside the
-         * legacy controller path so it can be enabled per environment and
-         * switched off instantly without a deploy.
+         * Copilot V2 orchestration — now the canonical path. The legacy
+         * cascade in AiAgentChatController remains reachable by setting this
+         * to false, so the flag stays a true kill switch in both directions,
+         * but it is deprecated and scheduled for removal.
          */
-        'v2_enabled' => env('AI_COPILOT_V2_ENABLED', false),
+        'v2_enabled' => env('AI_COPILOT_V2_ENABLED', true),
         'router' => env('AI_COPILOT_ROUTER', 'structured'),
         'router_confidence_threshold' => (float) env('AI_COPILOT_ROUTER_CONFIDENCE_THRESHOLD', 0.55),
         'knowledge_tool_enabled' => env('AI_COPILOT_KNOWLEDGE_TOOL_ENABLED', true),
         'conversation_state_enabled' => env('AI_COPILOT_CONVERSATION_STATE_ENABLED', true),
         'trace_enabled' => env('AI_COPILOT_TRACE_ENABLED', true),
-        'streaming_enabled' => env('AI_COPILOT_STREAMING_ENABLED', false),
+        'streaming_enabled' => env('AI_COPILOT_STREAMING_ENABLED', true),
 
         'read_only' => env('AI_COPILOT_READ_ONLY', false),
         'rag_enabled' => env('AI_RAG_ENABLED', true),
@@ -35,6 +36,24 @@ return [
         'debug_enabled' => env('AI_DEBUG_ENABLED', false),
         'incremental_indexing_enabled' => env('AI_INCREMENTAL_INDEXING_ENABLED', true),
         'history_messages' => (int) env('AI_COPILOT_HISTORY_MESSAGES', 20),
+
+        /*
+         * Approximate token ceiling for replayed conversation history. A
+         * message count alone is not a bound — twenty turns quoting reports can
+         * exceed the context window and make the provider reject the whole
+         * request. Oldest messages are dropped first; the newest is always kept.
+         */
+        'history_token_budget' => (int) env('AI_COPILOT_HISTORY_TOKEN_BUDGET', 3000),
+
+        /*
+         * Interactive latency budget, in seconds, for a Copilot chat turn.
+         * Deliberately far below the shared `ai_timeout_seconds` (which also
+         * governs document extraction and batch indexing): a person waiting at
+         * a chat box must not be held for minutes. Queued document work keeps
+         * the longer budget.
+         */
+        'interactive_timeout_seconds' => (int) env('AI_COPILOT_INTERACTIVE_TIMEOUT_SECONDS', 45),
+
         'action_ttl_minutes' => (int) env('AI_ACTION_TTL_MINUTES', 30),
     ],
 
@@ -61,6 +80,14 @@ return [
         'provider' => env('AI_EMBEDDING_PROVIDER', env('AI_PROVIDER', 'openai')),
         'model' => env('AI_EMBEDDING_MODEL', 'text-embedding-3-small'),
         'dimensions' => env('AI_EMBEDDING_DIMENSIONS') !== null ? (int) env('AI_EMBEDDING_DIMENSIONS') : null,
+
+        /*
+         * Inputs per batched embedding request. Modest on purpose: a very large
+         * batch is one request that fails wholesale, and providers cap total
+         * tokens per call regardless of the item count. Lower this if a
+         * provider starts rejecting requests as too large.
+         */
+        'batch_size' => (int) env('AI_EMBEDDING_BATCH_SIZE', 32),
     ],
 
     'rag' => [
@@ -78,6 +105,25 @@ return [
     */
     'default_provider' => env('AI_DEFAULT_PROVIDER', 'openai'),
     'default_model' => env('AI_DEFAULT_MODEL', 'gpt-4o-mini'),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Fallback provider
+    |--------------------------------------------------------------------------
+    | Used for ONE retry when the primary provider fails with an infrastructure
+    | error — a timeout, a rate limit, an overload, a 5xx. Never used for an
+    | invalid key, an unsupported capability, an unknown model or a malformed
+    | request: those fail identically on any provider, and retrying only hides
+    | the real cause.
+    |
+    | Both keys must be set, the provider must differ from the primary, and its
+    | credentials must be present, or failover reports itself as unconfigured
+    | rather than promising resilience the deployment does not have.
+    */
+    'fallback' => [
+        'provider' => env('AI_FALLBACK_PROVIDER', ''),
+        'model' => env('AI_FALLBACK_MODEL', ''),
+    ],
 
     /*
     |--------------------------------------------------------------------------

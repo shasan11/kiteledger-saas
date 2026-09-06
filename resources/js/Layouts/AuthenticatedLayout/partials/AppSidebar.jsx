@@ -471,6 +471,8 @@ export default function AppSidebar({
                     .app-sidebar .ant-menu-item,
                     .app-sidebar .ant-menu-submenu-title {
                         position: relative;
+                        display: flex !important;
+                        align-items: center !important;
                         height: 42px !important;
                         line-height: 42px !important;
                         margin: ${token.marginXXS}px 0 !important;
@@ -559,6 +561,10 @@ export default function AppSidebar({
                     }
 
                     .app-sidebar .ant-menu-title-content {
+                        display: flex;
+                        align-items: center;
+                        height: 100%;
+                        min-width: 0;
                         line-height: ${token.lineHeightSM};
                         overflow: hidden;
                         font-size: ${token.fontSize}px !important;

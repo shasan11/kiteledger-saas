@@ -7,6 +7,7 @@ namespace App\Services\AI\Copilot\Metrics;
 use App\Services\AI\Copilot\CopilotException;
 use App\Services\AI\Tools\Queries\InventoryQueryTool;
 use App\Services\AI\Tools\Queries\JournalVoucherQueryTool;
+use App\Services\AI\Tools\Queries\OperationalQueryTool;
 use App\Services\AI\Tools\Queries\PayableQueryTool;
 use App\Services\AI\Tools\Queries\PurchaseQueryTool;
 use App\Services\AI\Tools\Queries\ReceivableQueryTool;
@@ -160,6 +161,46 @@ final class CopilotMetricCatalog
                 'fast_moving' => [InventoryQueryTool::class, 'fastMovingProducts'],
             ],
             'dimensions' => ['product', 'warehouse'],
+            'currency' => false,
+        ],
+        'pending_leads' => [
+            'label' => 'Pending leads',
+            'definition' => 'Active CRM leads that are new, contacted, or qualified and have not reached a terminal status.',
+            'permissions' => ['crm.leads.view', 'crm.lead.view', 'crm.view', 'crm.manage', 'crm.*'],
+            'operations' => [
+                'summary' => [OperationalQueryTool::class, 'pendingLeads'],
+            ],
+            'dimensions' => [],
+            'currency' => false,
+        ],
+        'open_deals' => [
+            'label' => 'Open deals',
+            'definition' => 'Active CRM deals whose status is open.',
+            'permissions' => ['crm.deals.view', 'crm.deal.view', 'crm.view', 'crm.manage', 'crm.*'],
+            'operations' => [
+                'summary' => [OperationalQueryTool::class, 'openDeals'],
+            ],
+            'dimensions' => [],
+            'currency' => false,
+        ],
+        'active_projects' => [
+            'label' => 'Active projects',
+            'definition' => 'Accessible active projects that are not completed or cancelled.',
+            'permissions' => ['project.project.view', 'project.view', 'project.*'],
+            'operations' => [
+                'summary' => [OperationalQueryTool::class, 'activeProjects'],
+            ],
+            'dimensions' => [],
+            'currency' => false,
+        ],
+        'pending_tasks' => [
+            'label' => 'Pending tasks',
+            'definition' => 'Accessible active project tasks that are not completed, done, or cancelled.',
+            'permissions' => ['project.task.view', 'project.project.view', 'project.*'],
+            'operations' => [
+                'summary' => [OperationalQueryTool::class, 'pendingTasks'],
+            ],
+            'dimensions' => [],
             'currency' => false,
         ],
     ];

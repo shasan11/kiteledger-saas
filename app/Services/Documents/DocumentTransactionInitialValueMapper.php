@@ -233,6 +233,7 @@ class DocumentTransactionInitialValueMapper
 
             return [
                 'product_id' => $matches['product_' . $idx] ?? null,
+                'product_code' => $line['product_code'] ?? $line['code'] ?? $line['sku'] ?? null,
                 'product_name' => $line['product_name'] ?? $line['name'] ?? null,
                 'description' => $line['description'] ?? $line['product_name'] ?? 'Extracted line item',
                 'qty' => $qty,
@@ -246,7 +247,7 @@ class DocumentTransactionInitialValueMapper
                 'account_id' => $matches['account_' . $idx] ?? null,
                 'account_hint' => $line['account_hint'] ?? null,
                 'line_total' => $lineTotal,
-                'warning' => empty($matches['product_' . $idx]) ? 'Product not linked' : null,
+                'warning' => null,
             ];
         }, $lines, array_keys($lines)));
     }

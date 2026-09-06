@@ -16,6 +16,9 @@ class AiUsageLog extends Model
         'prompt_tokens', 'completion_tokens', 'total_tokens',
         'estimated_cost', 'status', 'error_message', 'duration_ms', 'request_hash',
         'question', 'intent', 'selected_tool', 'filters', 'date_range', 'row_count', 'token_estimate',
+        // Structured telemetry.
+        'request_id', 'feature', 'error_code', 'fallback_provider', 'cache_hit',
+        'first_token_ms', 'retrieval_ms', 'retrieval_source_count', 'document_page_count',
     ];
 
     protected $casts = [
@@ -28,5 +31,10 @@ class AiUsageLog extends Model
         'date_range' => 'array',
         'row_count' => 'integer',
         'token_estimate' => 'integer',
+        'cache_hit' => 'boolean',
+        'first_token_ms' => 'integer',
+        'retrieval_ms' => 'integer',
+        'retrieval_source_count' => 'integer',
+        'document_page_count' => 'integer',
     ];
 }

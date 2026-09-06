@@ -34,8 +34,8 @@ class SalaryStructure extends Model
         return [
             'effective_from' => 'date',
             'effective_to' => 'date',
-            'basic_salary' => 'decimal:2',
-            'gross_salary' => 'decimal:2',
+            'basic_salary' => 'decimal:6',
+            'gross_salary' => 'decimal:6',
             'exchange_rate' => 'decimal:6',
             'active' => 'boolean',
         ];

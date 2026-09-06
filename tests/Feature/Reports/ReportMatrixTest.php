@@ -5,7 +5,8 @@ namespace Tests\Feature\Reports;
 use App\Models\Permission;
 use App\Models\User;
 use App\Services\AI\AiPermissionService;
-use App\Services\Reports\ReportAiSummaryService;
+use App\Services\AI\AiProviderManager;
+use App\Services\Reports\ReportRunner;
 use App\Services\Reports\ReportRegistry;
 use App\Services\Reports\ReportSoftQueryService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -162,23 +163,47 @@ class ReportMatrixTest extends TestCase
 
     public function test_report_summary_endpoint_remains_permission_isolated_from_copilot(): void
     {
-        $this->mock(ReportAiSummaryService::class)
-            ->shouldReceive('summarize')
-            ->once()
-            ->andReturn([
-                'summary' => [
+        // The real summarizer runs; only the report execution and the model
+        // call are substituted, so the permission checks under test are the
+        // ones the endpoint actually performs.
+        $this->mock(ReportRunner::class, function ($mock) {
+            $mock->shouldReceive('resolve')->andReturn([
+                'title' => 'Trial Balance',
+                'permission' => 'reports.financial.view',
+                'category_label' => 'Accounting',
+            ]);
+            $mock->shouldReceive('authorizes')->andReturnUsing(
+                fn ($request) => (bool) $request->user()?->can('reports.financial.view'),
+            );
+            $mock->shouldReceive('run')->andReturn([
+                'title' => 'Trial Balance',
+                'report_key' => 'trial-balance',
+                'columns' => [
+                    ['key' => 'account', 'title' => 'Account'],
+                    ['key' => 'debit', 'title' => 'Debit'],
+                ],
+                'rows' => [['account' => 'Cash', 'debit' => 100]],
+                'totals' => [],
+                'summary' => [],
+                'currency' => ['code' => 'AED'],
+                'period' => ['from' => '2026-08-01', 'to' => '2026-08-31'],
+                'generated_at' => '2026-09-01 10:00:00',
+            ]);
+        });
+
+        $this->mock(AiProviderManager::class, function ($mock) {
+            $mock->shouldReceive('chat')->andReturn([
+                'text' => json_encode([
                     'executive_summary' => 'The trial balance is balanced.',
-                    'key_numbers' => ['Total debit and credit are 100.'],
                     'trends' => [],
                     'risks' => [],
                     'recommended_actions' => [],
-                    'disclaimer' => 'AI-generated.',
-                ],
-                'meta' => [
-                    'report_key' => 'trial-balance',
-                    'report_title' => 'Trial Balance',
-                ],
+                ]),
+                'provider' => 'test',
+                'model' => 'test',
+                'usage' => ['prompt' => 1, 'completion' => 1, 'total' => 2],
             ]);
+        });
 
         $viewer = $this->userWith(['reports.financial.view']);
         $this->actingAs($viewer)
@@ -186,17 +211,13 @@ class ReportMatrixTest extends TestCase
             ->assertForbidden();
 
         $this->actingAs($viewer)
-            ->postJson('/api/reports/accounting/trial-balance/ai-summary', [
-                'summary_cards' => [['label' => 'Balance', 'value' => 100]],
-            ])
+            ->postJson('/api/reports/accounting/trial-balance/ai-summary', ['filters' => []])
             ->assertForbidden()
             ->assertJsonPath('success', false);
 
         $user = $this->userWith(['reports.ai_summary', 'reports.financial.view']);
         $this->actingAs($user)
-            ->postJson('/api/reports/accounting/trial-balance/ai-summary', [
-                'summary_cards' => [['label' => 'Balance', 'value' => 100]],
-            ])
+            ->postJson('/api/reports/accounting/trial-balance/ai-summary', ['filters' => []])
             ->assertOk()
             ->assertJsonPath('success', true)
             ->assertJsonPath('data.meta.report_key', 'trial-balance')

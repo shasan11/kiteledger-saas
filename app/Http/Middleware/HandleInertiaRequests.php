@@ -11,6 +11,7 @@ use App\Services\SaaS\TenantAccessService;
 use Database\Seeders\CentralRolesAndPermissionsSeeder;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\App;
+use Illuminate\Support\Facades\Cache;
 use Inertia\Middleware;
 
 class HandleInertiaRequests extends Middleware
@@ -92,7 +93,7 @@ class HandleInertiaRequests extends Middleware
             ...parent::share($request),
             'flash' => fn () => $this->flash($request),
             'auth' => [
-                'user' => $user,
+                'user' => fn () => $this->tenantSidebarUser($user, $scope->selectedBranchId($request, $user)),
                 'permissions' => fn () => $user && method_exists($user, 'getAllPermissions')
                     ? $user->getAllPermissions()->pluck('name')->values()->all()
                     : [],
@@ -214,6 +215,37 @@ class HandleInertiaRequests extends Middleware
             'Full Access Admin',
             'super-admin',
             'admin',
+        ]);
+    }
+
+    protected function tenantSidebarUser($user, ?string $currentBranchId = null): ?array
+    {
+        if (! $user) {
+            return null;
+        }
+
+        $updatedAt = optional($user->updated_at)->getTimestamp() ?? 'fresh';
+        $branchVersion = $currentBranchId ?: 'none';
+        $cacheKey = "sidebar-user-profile:v1:{$user->id}:{$updatedAt}:{$branchVersion}";
+
+        return Cache::remember($cacheKey, now()->addHour(), fn () => [
+            'id' => $user->id,
+            'uuid' => $user->uuid ?? null,
+            'name' => $user->name,
+            'display_name' => $user->display_name,
+            'username' => $user->username ?? null,
+            'first_name' => $user->first_name,
+            'last_name' => $user->last_name,
+            'email' => $user->email,
+            'image' => $user->image ?? null,
+            'image_url' => $user->image_url,
+            'timezone' => $user->timezone ?? null,
+            'locale' => $user->locale ?? null,
+            'branch_id' => $user->branch_id ?? null,
+            'current_branch_id' => $currentBranchId,
+            'department_id' => $user->department_id ?? null,
+            'role_id' => $user->role_id ?? null,
+            'active' => (bool) ($user->active ?? true),
         ]);
     }
 

@@ -1,6 +1,7 @@
 import { Card, Descriptions, Space, Tag, Typography, theme } from 'antd';
 import { CheckCircleOutlined, StopOutlined } from '@ant-design/icons';
 import { fieldLabel } from './ReviewIssuePanel';
+import { currencyOf, formatMoney } from '@/utils/money';
 
 const { Text, Title } = Typography;
 
@@ -11,7 +12,7 @@ const { Text, Title } = Typography;
  * proceed it says exactly what to fix rather than greying out a button with no
  * explanation.
  */
-export default function ConversionSummary({ review, documentType }) {
+export default function ConversionSummary({ review, documentType, currency = null }) {
     const { token } = theme.useToken();
 
     const fields = review?.fields || {};
@@ -63,7 +64,9 @@ export default function ConversionSummary({ review, documentType }) {
     }
 
     const total = value('totals.grand_total');
-    const currency = value('currency_code');
+    // The document's own currency when it stated one; the server already fell
+    // back to the tenant's base currency when it did not.
+    const money = currencyOf(currency || { code: value('currency_code') });
 
     return (
         <Card size="small" style={{ borderColor: token.colorSuccessBorder }}>
@@ -86,8 +89,9 @@ export default function ConversionSummary({ review, documentType }) {
                 </Descriptions.Item>
                 <Descriptions.Item label="Total">
                     <Text strong>
-                        {currency ? `${currency} ` : ''}
-                        {total ?? '-'}
+                        {total === null || total === undefined || total === ''
+                            ? '-'
+                            : formatMoney(total, money)}
                     </Text>
                 </Descriptions.Item>
                 <Descriptions.Item label="Lines">

@@ -99,6 +99,15 @@ class AiEmbeddingIndexer
             $keyName = (new $class)->getKeyName();
 
             $class::query()->orderBy($keyName)->chunk(50, function ($rows) use ($type, $cfg, $model, $provider, &$stats, $progress) {
+                /*
+                 * Work is collected for the whole database chunk and embedded
+                 * in one call, rather than one HTTP round trip per record.
+                 * Content-hash comparison happens first, so an unchanged record
+                 * costs nothing at all — a re-run over a large tenant sends no
+                 * requests instead of thousands.
+                 */
+                $work = [];
+
                 foreach ($rows as $row) {
                     $text = trim((string) ($cfg['text'])($row));
 
@@ -124,7 +133,26 @@ class AiEmbeddingIndexer
                         continue;
                     }
 
-                    $vector = $this->provider->embedOne($text);
+                    $work[] = [
+                        'row' => $row,
+                        'source_id' => $sourceId,
+                        'text' => $text,
+                        'hash' => $hash,
+                    ];
+                }
+
+                if ($work === []) {
+                    return;
+                }
+
+                $vectors = $this->provider->embed(array_column($work, 'text'));
+
+                foreach ($work as $position => $item) {
+                    // embed() preserves input order and leaves a gap rather
+                    // than shifting later vectors, so a missing entry here means
+                    // this text specifically did not embed.
+                    $vector = $vectors[$position] ?? [];
+
                     if ($vector === []) {
                         $stats['empty']++;
 
@@ -132,11 +160,11 @@ class AiEmbeddingIndexer
                     }
 
                     AiEmbedding::query()->updateOrCreate(
-                        ['source_type' => $type, 'source_id' => $sourceId, 'provider' => $provider, 'model' => $model],
+                        ['source_type' => $type, 'source_id' => $item['source_id'], 'provider' => $provider, 'model' => $model],
                         [
-                            'branch_id' => $cfg['branch'] ? (string) ($row->{$cfg['branch']} ?? '') ?: null : null,
-                            'content' => mb_substr($text, 0, 4000),
-                            'content_hash' => $hash,
+                            'branch_id' => $cfg['branch'] ? (string) ($item['row']->{$cfg['branch']} ?? '') ?: null : null,
+                            'content' => mb_substr($item['text'], 0, 4000),
+                            'content_hash' => $item['hash'],
                             'vector' => $vector,
                             'dims' => count($vector),
                         ],
@@ -145,7 +173,7 @@ class AiEmbeddingIndexer
                     $stats['indexed']++;
 
                     if ($progress) {
-                        $progress($type, $sourceId, ($cfg['label'])($row));
+                        $progress($type, $item['source_id'], ($cfg['label'])($item['row']));
                     }
                 }
             });

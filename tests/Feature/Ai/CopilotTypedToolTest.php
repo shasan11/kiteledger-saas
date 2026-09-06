@@ -14,6 +14,7 @@ use App\Services\AI\Copilot\Metrics\MetricQuery;
 use App\Services\AI\Copilot\Tools\CopilotToolExecutor;
 use App\Services\AI\Copilot\Tools\CopilotToolRegistry;
 use App\Services\AI\Tools\Queries\ReceivableQueryTool;
+use App\Services\AI\Tools\Queries\OperationalQueryTool;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Request;
 use Spatie\Permission\PermissionRegistrar;
@@ -79,6 +80,15 @@ class CopilotTypedToolTest extends TestCase
         $this->assertSame(ReceivableQueryTool::class, $definition->handlerClass);
         $this->assertSame('highestCustomerBalance', $definition->handlerMethod);
         $this->assertTrue($definition->hasCurrency);
+    }
+
+    public function test_catalog_resolves_pending_leads_to_the_operational_query_handler(): void
+    {
+        $definition = app(CopilotMetricCatalog::class)->resolve('pending_leads', 'summary');
+
+        $this->assertSame(OperationalQueryTool::class, $definition->handlerClass);
+        $this->assertSame('pendingLeads', $definition->handlerMethod);
+        $this->assertFalse($definition->hasCurrency);
     }
 
     public function test_unknown_metric_fails_closed_instead_of_guessing(): void

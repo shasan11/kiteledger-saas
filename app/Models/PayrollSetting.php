@@ -13,6 +13,23 @@ class PayrollSetting extends Model
     use HasFactory, HasUuids;
     use RequiresTenantConnection;
 
+    protected $attributes = [
+        'daily_rate_basis' => 'working_days',
+        'standard_working_days_mode' => 'working_days_only',
+        'default_monthly_working_days' => 30,
+        'rounding_method' => 'nearest',
+        'currency_precision' => 2,
+        'default_overtime_rate' => 0,
+        'late_deduction_per_day' => 0,
+        'overtime_enabled' => true,
+        'late_deduction_enabled' => false,
+        'unpaid_leave_deduction_enabled' => true,
+        'auto_post_journal_voucher' => false,
+        'require_approval_before_payment' => true,
+        'allow_multiple_runs' => false,
+        'active' => true,
+    ];
+
     protected $fillable = [
         'branch_id',
         'currency_id',
@@ -22,6 +39,7 @@ class PayrollSetting extends Model
         'rounding_method',
         'currency_precision',
         'default_overtime_rate',
+        'late_deduction_per_day',
         'overtime_enabled',
         'late_deduction_enabled',
         'unpaid_leave_deduction_enabled',
@@ -42,6 +60,7 @@ class PayrollSetting extends Model
             'currency_precision' => 'integer',
             'default_monthly_working_days' => 'integer',
             'default_overtime_rate' => 'decimal:4',
+            'late_deduction_per_day' => 'decimal:6',
             'overtime_enabled' => 'boolean',
             'late_deduction_enabled' => 'boolean',
             'unpaid_leave_deduction_enabled' => 'boolean',

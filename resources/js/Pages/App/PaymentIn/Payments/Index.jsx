@@ -31,6 +31,7 @@ const statusColor = (s) => ({ draft: 'default', posted: 'blue', cancelled: 'red'
 export default function PaymentsIndex(props) {
     const crudRef = useRef(null);
     const [unapprovedCount, setUnapprovedCount] = useState(0);
+    const [approvalAlertDismissed, setApprovalAlertDismissed] = useState(false);
     const [reviewOpen, setReviewOpen] = useState(false);
     const [unapprovedRows, setUnapprovedRows] = useState([]);
     const [reviewLoading, setReviewLoading] = useState(false);
@@ -133,24 +134,25 @@ export default function PaymentsIndex(props) {
             <Head title="Customer Payments" />
 
             <div>
-                {unapprovedCount > 0 && (
-                    <div style={{ padding: '12px 16px 0' }}>
-                        <Alert
-                            type="warning"
-                            showIcon
-                            icon={<ExclamationCircleOutlined />}
-                            message={
-                                <Space>
-                                    <span>
-                                        {unapprovedCount} payment{unapprovedCount !== 1 ? 's' : ''} not yet approved.
-                                    </span>
-                                    <Button size="small" type="primary" onClick={openReview}>
-                                        Review &amp; Approve
-                                    </Button>
-                                </Space>
-                            }
-                        />
-                    </div>
+                {unapprovedCount > 0 && !approvalAlertDismissed && (
+                    <Alert
+                        type="warning"
+                        showIcon
+                        closable
+                        onClose={() => setApprovalAlertDismissed(true)}
+                        icon={<ExclamationCircleOutlined />}
+                        style={{ margin: 0, border: 0, borderRadius: 0 }}
+                        message={
+                            <Space>
+                                <span>
+                                    {unapprovedCount} payment{unapprovedCount !== 1 ? 's' : ''} not yet approved.
+                                </span>
+                                <Button size="small" type="primary" onClick={openReview}>
+                                    Review &amp; Approve
+                                </Button>
+                            </Space>
+                        }
+                    />
                 )}
 
                 <ReusableCrud

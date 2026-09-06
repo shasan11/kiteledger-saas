@@ -35,8 +35,8 @@ final class QueryFinancialMetricTool extends Tool
     ) {
         parent::__construct(
             'query_financial_metric',
-            'Calculate a verified financial metric using deterministic accounting services. '
-            .'Use for every total, balance, ageing, ranking, inventory value and sales or purchase figure. '
+            'Calculate a verified financial or operational metric using deterministic KiteLedger services. '
+            .'Use for every total, balance, ageing, ranking, inventory value, CRM count, project count, and sales or purchase figure. '
             ."Available metrics and their operations:\n".$this->catalogHint(),
         );
     }

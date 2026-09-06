@@ -1,5 +1,5 @@
 import { forwardRef } from 'react';
-import { Input, Space, Tag, Tooltip, Typography, theme } from 'antd';
+import { Input, Select, Space, Tag, Tooltip, Typography, theme } from 'antd';
 import {
     CalculatorOutlined,
     CheckCircleOutlined,
@@ -36,7 +36,7 @@ const ORIGIN_ICON = {
  * reaches the ledger.
  */
 const ReviewField = forwardRef(function ReviewField(
-    { field, label, onChange, onFocusEvidence, disabled = false },
+    { field, label, onChange, onFocusEvidence, disabled = false, options },
     ref,
 ) {
     const { token } = theme.useToken();
@@ -51,12 +51,13 @@ const ReviewField = forwardRef(function ReviewField(
     return (
         <div
             ref={ref}
+            className={`document-review-field${needsAttention ? ' is-attention' : ''}`}
             style={{
-                padding: 12,
-                borderRadius: token.borderRadiusLG,
+                padding: 10,
+                borderRadius: 6,
                 border: `1px solid ${needsAttention ? token.colorWarningBorder : token.colorBorderSecondary}`,
                 background: needsAttention ? token.colorWarningBg : token.colorBgContainer,
-                transition: 'background 0.2s, border-color 0.2s',
+                transition: 'background 0.2s, border-color 0.2s, box-shadow 0.2s',
             }}
         >
             <Space size={6} style={{ marginBottom: 6, flexWrap: 'wrap' }}>
@@ -64,8 +65,8 @@ const ReviewField = forwardRef(function ReviewField(
                     {label}
                 </Text>
 
-                {/* Origin is always visible for anything not read straight off the page. */}
-                {field.origin !== 'extracted' && (
+                {/* Keep provenance quiet unless it helps resolve an issue. */}
+                {needsAttention && field.origin !== 'extracted' && (
                     <Tooltip title={field.warnings?.[0] || field.origin_label}>
                         <Tag
                             bordered={false}
@@ -90,14 +91,32 @@ const ReviewField = forwardRef(function ReviewField(
                 )}
             </Space>
 
-            <Input
-                value={field.value ?? ''}
-                onChange={(e) => onChange?.(field.key, e.target.value)}
-                onFocus={() => onFocusEvidence?.(field)}
-                disabled={disabled}
-                status={isConflict ? 'error' : undefined}
-                placeholder={field.state === 'missing' ? 'Not found - please enter' : undefined}
-            />
+            {/* A field with a fixed vocabulary (document type) is a Select, so
+                the value stays one the extractor and the converter both know,
+                and the reader sees "Sales Invoice" rather than a slug. */}
+            {options ? (
+                <Select
+                    value={field.value || undefined}
+                    onChange={(value) => onChange?.(field.key, value)}
+                    onFocus={() => onFocusEvidence?.(field)}
+                    options={options}
+                    disabled={disabled}
+                    status={isConflict ? 'error' : undefined}
+                    placeholder={field.state === 'missing' ? 'Not found - please select' : 'Select a type'}
+                    showSearch
+                    optionFilterProp="label"
+                    style={{ width: '100%' }}
+                />
+            ) : (
+                <Input
+                    value={field.value ?? ''}
+                    onChange={(e) => onChange?.(field.key, e.target.value)}
+                    onFocus={() => onFocusEvidence?.(field)}
+                    disabled={disabled}
+                    status={isConflict ? 'error' : undefined}
+                    placeholder={field.state === 'missing' ? 'Not found - please enter' : undefined}
+                />
+            )}
 
             {/* A conflict shows both numbers and lets the user decide; KiteLedger
                 never silently overwrites what the document says. */}
@@ -128,7 +147,7 @@ const ReviewField = forwardRef(function ReviewField(
             )}
 
             {/* Evidence, only when it genuinely exists. Never a fabricated location. */}
-            {!isDerived && field.evidence?.[0]?.text && (
+            {needsAttention && !isDerived && field.evidence?.[0]?.text && (
                 <Text type="secondary" style={{ fontSize: 11, display: 'block', marginTop: 6 }}>
                     Found on page {field.evidence[0].page ?? '?'}: “{field.evidence[0].text}”
                 </Text>

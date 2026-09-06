@@ -101,8 +101,15 @@ class AiProviderManager
     }
 
     /**
-     * Generate embedding vectors for many strings (one request each — universally
-     * supported across providers, incl. Ollama).
+     * Generate embedding vectors for many strings.
+     *
+     * Batched into one request per group where the provider supports it, which
+     * is the difference between an index that rebuilds in under a minute and
+     * one that makes a separate HTTP round trip for every chunk and times out
+     * on shared hosting. Providers that cannot batch fall back to one request
+     * per text, and the returned array always lines up with the input order
+     * either way — a caller pairs vectors with source records positionally, so
+     * a dropped or reordered entry would attach the wrong vector to a record.
      *
      * @param  array<int, string>  $texts
      * @return array<int, array<int, float>>
@@ -129,26 +136,50 @@ class AiProviderManager
             @set_time_limit($timeout + 20);
         }
 
-        $out = [];
+        // Empty inputs are never sent to the provider but keep their slot, so
+        // the caller's positional pairing survives.
+        $out = array_fill(0, count($texts), []);
+        $pending = [];
 
-        foreach ($texts as $text) {
+        foreach ($texts as $index => $text) {
             $text = trim((string) $text);
-            if ($text === '') {
-                $out[] = [];
 
-                continue;
+            if ($text !== '') {
+                $pending[$index] = $text;
             }
+        }
+
+        if ($pending === []) {
+            return $out;
+        }
+
+        $batchSize = $this->settings->supportsBatchEmbeddings()
+            ? $this->settings->embeddingBatchSize()
+            : 1;
+
+        foreach (array_chunk($pending, $batchSize, preserve_keys: true) as $batch) {
+            $indexes = array_keys($batch);
+            $inputs = array_values($batch);
 
             try {
-                $response = Prism::embeddings()
+                $request = Prism::embeddings()
                     ->using($this->providerEnum($provider), $model)
                     ->usingProviderConfig($this->embeddingProviderConfig($provider))
-                    ->withClientOptions($this->clientOptions($timeout, $connectTimeout))
-                    ->fromInput($text)
-                    ->asEmbeddings();
+                    ->withClientOptions($this->clientOptions($timeout, $connectTimeout));
 
-                $vector = $response->embeddings[0]->embedding ?? [];
-                $out[] = array_map('floatval', $vector);
+                $response = (count($inputs) === 1
+                    ? $request->fromInput($inputs[0])
+                    : $request->fromArray($inputs)
+                )->asEmbeddings();
+
+                foreach ($indexes as $position => $index) {
+                    $vector = $response->embeddings[$position]->embedding ?? null;
+
+                    // A provider that returns fewer vectors than inputs would
+                    // otherwise shift every later vector onto the wrong record.
+                    // Leaving the slot empty makes the gap visible instead.
+                    $out[$index] = $vector === null ? [] : array_map('floatval', $vector);
+                }
             } catch (PrismException $e) {
                 $this->throwMappedError($provider, $model, $e);
             } catch (Throwable $e) {

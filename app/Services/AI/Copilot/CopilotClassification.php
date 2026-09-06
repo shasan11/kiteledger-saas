@@ -27,14 +27,14 @@ class CopilotClassification
     public CopilotIntent $intent = CopilotIntent::Unsupported;
 
     #[SchemaProperty(
-        description: 'Business module: sales, purchases, inventory, accounting, contacts, reports, hr, or general.',
+        description: 'Business module: sales, purchases, inventory, accounting, contacts, crm, projects, reports, hr, or general.',
         required: false,
         maxLength: 40,
     )]
     public string $module = 'general';
 
     #[SchemaProperty(
-        description: 'Canonical metric key when the user asks for a number, e.g. accounts_receivable, net_sales, inventory_value. Empty when not a metric request.',
+        description: 'Canonical metric key when the user asks for a number, e.g. accounts_receivable, net_sales, inventory_value, pending_leads, open_deals, active_projects, or pending_tasks. Empty when not a metric request.',
         required: false,
         maxLength: 60,
     )]

@@ -36,9 +36,9 @@ class PayrollPayment extends Model
     protected function casts(): array
     {
         return [
-            'amount' => 'decimal:2',
+            'amount' => 'decimal:6',
             'exchange_rate' => 'decimal:6',
-            'base_currency_amount' => 'decimal:2',
+            'base_currency_amount' => 'decimal:6',
             'payment_date' => 'date',
         ];
     }

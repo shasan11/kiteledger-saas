@@ -58,11 +58,11 @@ class Payroll extends Model
     {
         return [
             'total_employees' => 'integer',
-            'total_earnings' => 'decimal:2',
-            'total_gross' => 'decimal:2',
-            'total_deductions' => 'decimal:2',
-            'total_net_payable' => 'decimal:2',
-            'total_base_currency_amount' => 'decimal:2',
+            'total_earnings' => 'decimal:6',
+            'total_gross' => 'decimal:6',
+            'total_deductions' => 'decimal:6',
+            'total_net_payable' => 'decimal:6',
+            'total_base_currency_amount' => 'decimal:6',
             'exchange_rate' => 'decimal:6',
             'generated_at' => 'datetime',
             'approved_at' => 'datetime',

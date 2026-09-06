@@ -5,66 +5,59 @@ namespace App\Http\Controllers\Api\Reports;
 use App\Http\Controllers\Controller;
 use App\Services\AI\AiPermissionService;
 use App\Services\AI\AiProviderException;
-use App\Services\Reports\ReportAiSummaryService;
+use App\Services\Reports\Intelligence\ReportAccessDeniedException;
+use App\Services\Reports\Intelligence\ReportIntelligenceService;
 use App\Services\Reports\ReportRegistry;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use InvalidArgumentException;
 use Throwable;
 
+/**
+ * AI summary for one report.
+ *
+ * The request body carries only *what to summarize* — filters, and the report
+ * identified by the route. It deliberately no longer accepts rows, totals,
+ * summary cards or row counts: those were previously taken as financial truth,
+ * which meant an edited request could change what the AI reported about the
+ * company's position. The server now executes the report itself.
+ */
 class ReportAiSummaryController extends Controller
 {
     public function __construct(
-        private readonly ReportAiSummaryService $summaries,
+        private readonly ReportIntelligenceService $intelligence,
         private readonly AiPermissionService $permissions,
     ) {}
 
     public function summarize(Request $request, string $category, string $report_key): JsonResponse
     {
-        $meta = ReportRegistry::resolve($category, $report_key);
-
-        if (! $meta) {
+        if (! ReportRegistry::resolve($category, $report_key)) {
             return $this->error('Report not found.', 404);
         }
-
-        $this->authorizeReport($request, $meta['permission'] ?? 'reports.view');
 
         if (! $this->permissions->canSummarizeReports($request->user())) {
             return $this->error('You do not have permission to use AI report summaries.', 403);
         }
 
         $validated = $request->validate([
-            'filters' => ['nullable', 'array', 'max:30'],
-            'columns' => ['nullable', 'array', 'max:30'],
-            'columns.*' => ['array'],
-            'columns.*.key' => ['required', 'string', 'max:100'],
-            'columns.*.title' => ['required', 'string', 'max:120'],
-            'rows' => ['nullable', 'array', 'max:100'],
-            'rows.*' => ['array'],
-            'totals' => ['nullable', 'array', 'max:50'],
-            'summary_cards' => ['nullable', 'array', 'max:30'],
-            'summary_cards.*' => ['array'],
-            'summary_cards.*.label' => ['nullable', 'string', 'max:120'],
-            'summary_cards.*.title' => ['nullable', 'string', 'max:120'],
-            'metadata' => ['nullable', 'array'],
-            'metadata.currency' => ['nullable', 'string', 'max:20'],
-            'metadata.branch' => ['nullable', 'string', 'max:120'],
-            'metadata.fiscal_year' => ['nullable', 'string', 'max:120'],
-            'metadata.generated_at' => ['nullable', 'string', 'max:80'],
-            'metadata.row_count' => ['nullable', 'integer', 'min:0', 'max:1000000'],
-        ]);
-
-        $payload = array_merge($validated, [
-            'category' => $category,
-            'report_key' => $report_key,
-            'report_title' => $meta['title'] ?? $report_key,
+            'filters' => ['nullable', 'array', 'max:40'],
         ]);
 
         try {
             return response()->json([
                 'success' => true,
-                'data' => $this->summaries->summarize($payload, $request),
+                'data' => $this->intelligence->summarize(
+                    $request,
+                    $category,
+                    $report_key,
+                    $validated['filters'] ?? [],
+                ),
             ]);
+        } catch (ReportAccessDeniedException $e) {
+            // Report-level authorization, raised by the intelligence service
+            // after it resolves the report's own permission. Caught before
+            // AiProviderException, which also extends RuntimeException.
+            return $this->error($e->getMessage(), 403);
         } catch (InvalidArgumentException $e) {
             return $this->error($e->getMessage(), 422);
         } catch (AiProviderException $e) {
@@ -74,13 +67,6 @@ class ReportAiSummaryController extends Controller
 
             return $this->error('Unable to generate summary right now. Please try again.', 503);
         }
-    }
-
-    private function authorizeReport(Request $request, string $permission): void
-    {
-        $user = $request->user();
-        abort_unless($user, 401);
-        abort_unless($user->can('reports.view') || $user->can($permission), 403);
     }
 
     private function providerError(AiProviderException $exception): JsonResponse

@@ -1,6 +1,5 @@
 import { router } from '@inertiajs/react';
 import { Tabs } from 'antd';
-import { SafetyCertificateOutlined, TeamOutlined } from '@ant-design/icons';
 
 export default function AccessControlTabs({ activeKey }) {
   return (
@@ -16,19 +15,11 @@ export default function AccessControlTabs({ activeKey }) {
         items={[
           {
             key: 'users',
-            label: (
-              <span>
-                <TeamOutlined /> Users
-              </span>
-            ),
+            label: 'Users',
           },
           {
             key: 'roles',
-            label: (
-              <span>
-                <SafetyCertificateOutlined /> Roles
-              </span>
-            ),
+            label: 'Roles',
           },
         ]}
       />

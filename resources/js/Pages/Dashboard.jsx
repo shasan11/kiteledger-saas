@@ -15,13 +15,13 @@ import {
     Typography,
     theme,
 } from 'antd';
-import { ReloadOutlined } from '@ant-design/icons';
+import { ArrowRightOutlined, CheckCircleOutlined, ReloadOutlined, WarningOutlined } from '@ant-design/icons';
 import axios from 'axios';
 import dayjs from 'dayjs';
 import {
+    Bar,
     Area,
     AreaChart,
-    Bar,
     BarChart,
     CartesianGrid,
     Cell,
@@ -37,6 +37,7 @@ import {
 } from 'recharts';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import { useTrans } from '@/lib/i18n';
+import { humanizeLabel } from '@/utils/humanizeLabel';
 
 const { RangePicker } = DatePicker;
 const { Text, Title } = Typography;
@@ -111,15 +112,31 @@ const profitTone = (value) => (toNum(value) >= 0 ? 'positive' : 'negative');
 
 const compactMoney = (value) => (value == null || value === '' ? DASH : compactFmt.format(Number(value || 0)));
 
-function calcTrend(sparkline) {
-    if (!sparkline || sparkline.length < 6) return null;
-    const mid = Math.floor(sparkline.length / 2);
-    const earlier = sparkline.slice(0, mid);
-    const recent = sparkline.slice(mid);
-    const sumE = earlier.reduce((s, d) => s + toNum(d.value), 0);
-    const sumR = recent.reduce((s, d) => s + toNum(d.value), 0);
-    if (sumE === 0) return sumR > 0 ? 100 : null;
-    return ((sumR - sumE) / Math.abs(sumE)) * 100;
+function compactSeries(rows = [], valueKeys = [], { snapshot = false, maxPoints = 18 } = {}) {
+    const today = dayjs().endOf('day');
+    const withoutFutureDates = rows.filter((row) => !row?.date || !dayjs(row.date).isAfter(today, 'day'));
+    const source = withoutFutureDates.length ? withoutFutureDates : rows;
+
+    // Keep daily detail when monthly grouping would leave just one point.
+    const months = new Set(source.map((row) => dayjs(row?.date).format('YYYY-MM')));
+    if (source.length <= maxPoints || months.size === 1) return source;
+
+    const monthly = new Map();
+    source.forEach((row) => {
+        const parsed = dayjs(row?.date);
+        const key = parsed.isValid() ? parsed.format('YYYY-MM') : `item-${monthly.size}`;
+        const current = monthly.get(key) || { date: row?.date, label: parsed.isValid() ? parsed.format('MMM YY') : '' };
+
+        valueKeys.forEach((valueKey) => {
+            current[valueKey] = snapshot
+                ? toNum(row?.[valueKey])
+                : toNum(current[valueKey]) + toNum(row?.[valueKey]);
+        });
+        current.date = row?.date || current.date;
+        monthly.set(key, current);
+    });
+
+    return Array.from(monthly.values());
 }
 
 export default function Dashboard() {
@@ -158,28 +175,41 @@ export default function Dashboard() {
 
     const m = useMemo(() => buildModel(data), [data]);
     const branches = data.branches || bc.branches || [];
+    const firstName = page.props.auth?.user?.name?.split(' ')?.[0];
+
     return (
         <AuthenticatedLayout
             header={<DashHeader branches={branches} filters={filters} loading={loading} onRefresh={fetch} onChange={setFilters} />}
         >
             <Head title={t('Dashboard')} />
             <Styles token={token} />
+
             <main className="kd">
                 <div className="kd-wrap">
+                     
+
                     {error && (
-                        <Alert showIcon type="error" message={t('Dashboard could not be loaded')} description={error}
-                            action={<Button onClick={fetch}>{t('Retry')}</Button>} />
+                        <Alert
+                            showIcon
+                            type="error"
+                            message={t('Dashboard could not be loaded')}
+                            description={error}
+                            action={<Button onClick={fetch}>{t('Retry')}</Button>}
+                        />
                     )}
-                    {loading ? <DashSkeleton /> : (
+
+                    {loading ? <DashSkeleton /> : error ? null : (
                         <>
-                            <section className="kd-kpis">
+                            <section className="kd-kpi-grid" aria-label={t('Key financial metrics')}>
                                 {m.kpis.map((kpi) => <KpiCard key={kpi.key} {...kpi} />)}
                             </section>
 
-                            <section className="kd-focus-grid">
+                            <section className="kd-focus-grid" aria-label={t('Financial overview')}>
                                 <FinancialChart data={m.chartData} summary={m.executive} />
-                                <AttentionPanel summary={m.cashPosition} items={m.attentionItems} />
+                                <AttentionPanel items={m.attentionItems} />
                             </section>
+
+                            <FinancialSignals model={m} data={data} />
 
                             <section className="kd-cash-expense-row">
                                 <ExpenseDonut data={m.expenseBreakdown} />
@@ -193,14 +223,16 @@ export default function Dashboard() {
 
                             {(m.topCustomers.length > 0 || m.topSuppliers.length > 0) && (
                                 <section className="kd-row-2">
-                                    <TopPartiesBar title={t('Top customers')} data={m.topCustomers} color={THEME_COLOURS.primary} />
-                                    <TopPartiesBar title={t('Top suppliers')} data={m.topSuppliers} color={THEME_COLOURS.warning} />
+                                    {m.topCustomers.length > 0 && (
+                                        <TopPartiesBar title={t('Top customers')} subtitle={t('Highest sales contribution')} data={m.topCustomers} color={THEME_COLOURS.primary} />
+                                    )}
+                                    {m.topSuppliers.length > 0 && (
+                                        <TopPartiesBar title={t('Top suppliers')} subtitle={t('Highest purchase contribution')} data={m.topSuppliers} color={THEME_COLOURS.warning} />
+                                    )}
                                 </section>
                             )}
 
-                            {m.bizCards.length > 0 && (
-                                <ModuleOverview cards={m.bizCards} />
-                            )}
+                            {m.bizCards.length > 0 && <ModuleOverview cards={m.bizCards} />}
 
                             {(m.approachingProjects.length > 0 || m.overdueProjects.length > 0) && (
                                 <ProjectDeadlines approaching={m.approachingProjects} overdue={m.overdueProjects} />
@@ -215,39 +247,74 @@ export default function Dashboard() {
     );
 }
 
-function AttentionPanel({ summary, items }) {
-    const visibleItems = items.slice(0, 4);
+function CardHeading({ title, subtitle }) {
     return (
-        <Card className="kd-card kd-attention" styles={{ body: { padding: 0 } }}>
-            <div className="kd-section-head">
-                <div>
-                    <span className="kd-card-hdr__t">Attention</span>
-                    <Text type="secondary">Items worth reviewing</Text>
+        <div className="kd-card-heading">
+            <span className="kd-card-heading__title">{title}</span>
+            {subtitle && <Text type="secondary">{subtitle}</Text>}
+        </div>
+    );
+}
+
+function FinancialSignals({ model, data }) {
+    const t = useTrans();
+    const { executive: s, cashPosition } = model;
+    const cf = data.cashflow_summary;
+    const signals = [
+        { label: 'Net profit margin', value: s.revenue > 0 ? `${s.margin.toFixed(1)}%` : DASH, helper: 'Net profit / revenue', tone: profitTone(s.netProfit) },
+        { label: 'Net cash flow', value: cf ? fmtMoney(cf.net_cash_flow) : DASH, helper: 'Cash received less cash paid', tone: profitTone(cf?.net_cash_flow) },
+        { label: 'Net liquidity', value: fmtMoney(cashPosition.netLiquidity), helper: 'Cash + receivables − payables', tone: profitTone(cashPosition.netLiquidity) },
+        { label: 'Cash coverage', value: s.payables > 0 ? `${(s.cash / s.payables).toFixed(2)}×` : DASH, helper: s.payables > 0 ? 'Cash & bank / outstanding payables' : 'No outstanding payables', tone: 'neutral' },
+    ];
+
+    return (
+        <section className="kd-signal-grid" aria-label={t('Financial indicators')}>
+            {signals.map((item) => (
+                <div className="kd-signal" data-tone={item.tone} key={item.label}>
+                    <div className="kd-signal__top">
+                        <Text type="secondary">{t(item.label)}</Text>
+                        <span className="kd-signal__dot" aria-hidden="true" />
+                    </div>
+                    <strong className="kd-signal__value">{item.value}</strong>
+                    <Text type="secondary" className="kd-signal__helper">{t(item.helper)}</Text>
                 </div>
-                <span className={`kd-status ${visibleItems.length ? 'kd-status--warn' : 'kd-status--good'}`}>
-                    {visibleItems.length ? `${visibleItems.length} open` : 'All clear'}
-                </span>
-            </div>
-            <div className="kd-liquidity">
-                <div>
-                    <Text type="secondary">Net liquidity</Text>
-                    <strong>{fmtMoney(summary.netLiquidity)}</strong>
-                </div>
-                <Text type="secondary">Cash & bank {compactMoney(summary.cashBankBalance)}</Text>
-            </div>
+            ))}
+        </section>
+    );
+}
+
+function AttentionPanel({ items }) {
+    const t = useTrans();
+    const visibleItems = items.slice(0, 4);
+
+    return (
+        <Card
+            size="small"
+            className="kd-card kd-attention"
+            title={<CardHeading title={t('Needs attention')} subtitle={t('Items that may require action')} />}
+            extra={visibleItems.length
+                ? <Tag icon={<WarningOutlined />} color="warning">{visibleItems.length} {t('open')}</Tag>
+                : <Tag icon={<CheckCircleOutlined />} color="success">{t('All clear')}</Tag>}
+        >
             <div className="kd-attention__list">
                 {visibleItems.length ? visibleItems.map((item) => (
                     <button type="button" className="kd-attention__item" key={item.key} onClick={() => visit(item.href)}>
-                        <span>
-                            <b>{item.label}</b>
-                            <small>{item.module}</small>
+                        <span className="kd-attention__copy">
+                            <b>{t(item.label)}</b>
+                            <small>{t(item.module)}</small>
                         </span>
-                        <strong>{item.format === 'money' ? fmtMoney(item.value, true) : fmtNum(item.value)}</strong>
+                        <span className="kd-attention__value">
+                            <strong>{item.format === 'money' ? fmtMoney(item.value, true) : fmtNum(item.value)}</strong>
+                            <ArrowRightOutlined aria-hidden="true" />
+                        </span>
                     </button>
                 )) : (
                     <div className="kd-attention__empty">
-                        <span className="kd-health-dot kd-health-dot--good" />
-                        <Text type="secondary">No overdue or exceptional items</Text>
+                        <CheckCircleOutlined />
+                        <div>
+                            <Text strong>{t('Nothing urgent right now')}</Text>
+                            <Text type="secondary">{t('No overdue or exceptional items were found.')}</Text>
+                        </div>
                     </div>
                 )}
             </div>
@@ -256,148 +323,215 @@ function AttentionPanel({ summary, items }) {
 }
 
 function DashHeader({ branches, filters, loading, onRefresh, onChange }) {
-    const opts = [{ value: 'all', label: 'All branches' }, ...(branches || []).map((b) => ({
-        value: b.value ?? b.id, label: b.label ?? b.name ?? `Branch #${b.id}`,
+    const t = useTrans();
+    const opts = [{ value: 'all', label: t('All branches') }, ...(branches || []).map((b) => ({
+        value: b.value ?? b.id,
+        label: b.label ?? b.name ?? `${t('Branch')} #${b.id}`,
     }))];
+
     return (
         <div className="kd-hdr">
-            <div>
-                <Title level={5} style={{ margin: '0 0 1px', fontWeight: 650 }}>Dashboard</Title>
-                <Text type="secondary" style={{ fontSize: 11 }}>Financial overview for the selected fiscal period</Text>
+            <div className="kd-hdr__copy">
+                 
+                <Title level={4}>{t('Dashboard')}</Title>
+                <Text type="secondary">{t('Financial and operational performance')}</Text>
             </div>
+
             <div className="kd-hdr__ctl">
-                <Select value={filters.branch_id} options={opts} style={{ width: 150 }}
-                    onChange={(v) => onChange((c) => ({ ...c, branch_id: v || 'all' }))} />
-                <RangePicker
-                    value={filters.date_from && filters.date_to ? [dayjs(filters.date_from), dayjs(filters.date_to)] : null}
-                    style={{ width: 230 }}
-                    onChange={(d) => onChange((c) => ({ ...c, date_from: d?.[0]?.format('YYYY-MM-DD'), date_to: d?.[1]?.format('YYYY-MM-DD') }))}
+                <Select
+                    value={filters.branch_id}
+                    options={opts}
+                    className="kd-hdr__branch"
+                    aria-label={t('Branch')}
+                    onChange={(v) => onChange((c) => ({ ...c, branch_id: v || 'all' }))}
                 />
-                <Tooltip title="Refresh"><Button size="small" icon={<ReloadOutlined spin={loading} />} onClick={onRefresh} /></Tooltip>
+                <RangePicker
+                    allowClear={false}
+                    presets={[
+                        { label: t('This month'), value: [dayjs().startOf('month'), dayjs()] },
+                        { label: t('Last month'), value: [dayjs().subtract(1, 'month').startOf('month'), dayjs().subtract(1, 'month').endOf('month')] },
+                        { label: t('Last 90 days'), value: [dayjs().subtract(89, 'day'), dayjs()] },
+                        { label: t('Year to date'), value: [dayjs().startOf('year'), dayjs()] },
+                    ]}
+                    value={filters.date_from && filters.date_to ? [dayjs(filters.date_from), dayjs(filters.date_to)] : null}
+                    className="kd-hdr__range"
+                    onChange={(d) => onChange((c) => ({
+                        ...c,
+                        date_from: d?.[0]?.format('YYYY-MM-DD'),
+                        date_to: d?.[1]?.format('YYYY-MM-DD'),
+                    }))}
+                />
+                <Tooltip title={t('Refresh')}>
+                    <Button
+                        aria-label={t('Refresh dashboard')}
+                        disabled={loading}
+                        icon={<ReloadOutlined spin={loading} />}
+                        onClick={onRefresh}
+                    />
+                </Tooltip>
             </div>
         </div>
     );
 }
 
-function KpiCard({ label, value, sparkline, color, trend, invertTrend, helper }) {
-    const isUp = trend > 0;
-    const trendColor = invertTrend
-        ? (isUp ? THEME_COLOURS.error : THEME_COLOURS.success)
-        : (isUp ? THEME_COLOURS.success : THEME_COLOURS.error);
-    const hasSpark = Array.isArray(sparkline) && sparkline.some((d) => toNum(d.value) !== 0);
-    const gradientId = `kpi-g-${String(label || 'metric').toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
+function KpiCard({ label, value, helper, sparkline = [], color }) {
+    const t = useTrans();
 
     return (
-        <Card
-            className="kd-card kd-kpi"
-            style={{ '--kd-accent': color }}
-            styles={{ body: { padding: 0, height: '100%', position: 'relative', overflow: 'hidden' } }}
-        >
-            <div className="kd-kpi__accent" />
-            <div className="kd-kpi__content">
-                <div className="kd-kpi__top">
-                    <Text type="secondary" className="kd-kpi__label">{label}</Text>
-                    {trend != null && (
-                        <span className="kd-kpi__trend" style={{ '--kd-trend': trendColor }}>
-                            {isUp ? '+' : '-'}{Math.abs(trend).toFixed(1)}%
-                        </span>
-                    )}
-                </div>
-                <div className="kd-kpi__val">{fmtMoney(value)}</div>
-                {helper && <Text type="secondary" className="kd-kpi__helper">{helper}</Text>}
+        <Card size="small" className="kd-card kd-kpi" style={{ '--kd-kpi-accent': color }}>
+            <div className="kd-kpi__head">
+                <Text type="secondary">{t(label)}</Text>
+                <span className="kd-kpi__accent" aria-hidden="true" />
             </div>
-            {hasSpark && (
-                <div className="kd-kpi__spark" aria-hidden>
-                    <ResponsiveContainer width="100%" height="100%">
-                        <AreaChart data={sparkline}>
-                            <defs>
-                                <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
-                                    <stop offset="0%" stopColor={color} stopOpacity={0.24} />
-                                    <stop offset="100%" stopColor={color} stopOpacity={0.04} />
-                                </linearGradient>
-                            </defs>
-                            <Area
-                                type="monotone"
-                                dataKey="value"
-                                stroke={color}
-                                strokeWidth={1.6}
-                                fill={`url(#${gradientId})`}
-                                dot={false}
-                                isAnimationActive={false}
-                            />
-                        </AreaChart>
-                    </ResponsiveContainer>
+            <strong className="kd-kpi__value">{fmtMoney(value)}</strong>
+            <div className="kd-kpi__footer">
+                <Text type="secondary">{helper ? t(helper) : t('Selected period')}</Text>
+                <div className="kd-kpi__trend" role="img" aria-label={t(`${label} trend for the selected period`)}>
+                    {sparkline.length ? (
+                        <ResponsiveContainer width="100%" height="100%">
+                            <AreaChart data={sparkline} margin={{ top: 3, right: 1, bottom: 1, left: 1 }}>
+                                <ChartTooltip
+                                    labelFormatter={(_, payload) => fmtDate(payload?.[0]?.payload?.date)}
+                                    formatter={(amount) => [fmtMoney(amount), t(label)]}
+                                    contentStyle={{
+                                        background: 'var(--kd-elevated)',
+                                        borderColor: 'var(--kd-border)',
+                                        borderRadius: 'var(--kd-radius-sm)',
+                                        color: 'var(--kd-text)',
+                                        boxShadow: 'var(--kd-shadow-strong)',
+                                    }}
+                                    itemStyle={{ color: 'var(--kd-text)' }}
+                                />
+                                <Area
+                                    type="monotone"
+                                    dataKey="value"
+                                    stroke={color}
+                                    fill={color}
+                                    fillOpacity={0.08}
+                                    strokeWidth={2}
+                                    dot={false}
+                                    activeDot={{ r: 3 }}
+                                    isAnimationActive={false}
+                                />
+                            </AreaChart>
+                        </ResponsiveContainer>
+                    ) : <span className="kd-kpi__dash">{DASH}</span>}
                 </div>
-            )}
+            </div>
         </Card>
     );
 }
 
-
 function FinancialChart({ data, summary }) {
-    const hasData = data.some((d) => toNum(d.revenue) || toNum(d.expenses) || toNum(d.profit));
+    const t = useTrans();
+    const hasData = data.some((row) => toNum(row.revenue) || toNum(row.expenses) || toNum(row.profit));
+    const marginLabel = summary.revenue > 0 ? `${summary.margin.toFixed(1)}% ${t('margin')}` : t('No margin data');
 
     return (
-        <Card className="kd-card kd-chart-main kd-performance" styles={{ body: { padding: 0 } }}>
-            <div className="kd-performance__head">
+        <Card
+            size="small"
+            className="kd-card kd-performance"
+            title={<CardHeading title={t('Financial performance')} subtitle={t('Revenue, expenses and net profit over time')} />}
+            extra={<Tag color={summary.netProfit >= 0 ? 'success' : 'error'}>{marginLabel}</Tag>}
+        >
+            <div className="kd-performance__stats">
                 <div>
-                    <span className="kd-card-hdr__t">Financial performance</span>
-                    <Text type="secondary" style={{ fontSize: 11, display: 'block' }}>Revenue, expenses & net profit trend</Text>
+                    <Text type="secondary">{t('Revenue')}</Text>
+                    <strong>{compactMoney(summary.revenue)}</strong>
                 </div>
-                <div className="kd-performance__stats">
-                    <span>Revenue <b>{compactMoney(summary.revenue)}</b></span>
-                    <span>Expenses <b>{compactMoney(summary.expenses)}</b></span>
-                    <span>Profit <b>{compactMoney(summary.netProfit)}</b></span>
+                <div>
+                    <Text type="secondary">{t('Expenses')}</Text>
+                    <strong>{compactMoney(summary.expenses)}</strong>
+                </div>
+                <div>
+                    <Text type="secondary">{t('Net profit')}</Text>
+                    <strong>{compactMoney(summary.netProfit)}</strong>
                 </div>
             </div>
+
             {hasData ? (
-                <div className="kd-performance__chart">
+                <div className="kd-performance__chart" role="img" aria-label={t('Revenue, expenses and net profit over time')}>
                     <ResponsiveContainer width="100%" height="100%">
-                        <LineChart data={data} margin={{ top: 4, right: 10, bottom: 0, left: 0 }}>
+                        <LineChart data={data} margin={{ top: 18, right: 10, bottom: 6, left: 0 }}>
                             <CartesianGrid stroke="var(--kd-grid)" vertical={false} />
-                            <XAxis dataKey="label" axisLine={false} tickLine={false} tick={{ fill: 'var(--kd-muted)', fontSize: 9 }} />
-                            <YAxis axisLine={false} tickLine={false} tick={{ fill: 'var(--kd-muted)', fontSize: 9 }}
-                                tickFormatter={(v) => compactFmt.format(v)} width={58} />
+                            <XAxis
+                                dataKey="label"
+                                axisLine={false}
+                                tickLine={false}
+                                minTickGap={24}
+                                tick={{ fill: 'var(--kd-muted)', fontSize: 'var(--kd-font-sm)' }}
+                            />
+                            <YAxis
+                                axisLine={false}
+                                tickLine={false}
+                                width={66}
+                                tickFormatter={(value) => compactMoney(value)}
+                                tick={{ fill: 'var(--kd-muted)', fontSize: 'var(--kd-font-sm)' }}
+                            />
                             <ChartTooltip content={<MoneyTip />} />
-                            <Legend iconType="circle" iconSize={7} wrapperStyle={{ fontSize: 11, paddingTop: 4 }} />
-                            <Line type="monotone" dataKey="revenue" name="Revenue" stroke={THEME_COLOURS.primary} strokeWidth={1.8} dot={false} activeDot={{ r: 3 }} />
-                            <Line type="monotone" dataKey="expenses" name="Expenses" stroke={THEME_COLOURS.warning} strokeWidth={1.8} dot={false} activeDot={{ r: 3 }} />
-                            <Line type="monotone" dataKey="profit" name="Net Profit" stroke={THEME_COLOURS.text} strokeWidth={1.8} dot={false} activeDot={{ r: 3 }} />
+                            <Legend
+                                iconType="plainline"
+                                wrapperStyle={{ fontSize: 'var(--kd-font-sm)' }}
+                                formatter={(name) => <span style={{ color: 'var(--kd-text)' }}>{name}</span>}
+                            />
+                            <Line type="monotone" dataKey="revenue" name={t('Revenue')} stroke={THEME_COLOURS.primary} strokeWidth={2.25} dot={data.length <= 2} activeDot={{ r: 4 }} />
+                            <Line type="monotone" dataKey="expenses" name={t('Expenses')} stroke={THEME_COLOURS.warning} strokeWidth={2} strokeDasharray="5 3" dot={data.length <= 2} activeDot={{ r: 4 }} />
+                            <Line type="monotone" dataKey="profit" name={t('Net profit')} stroke={THEME_COLOURS.success} strokeWidth={2} strokeDasharray="2 3" dot={data.length <= 2} activeDot={{ r: 4 }} />
                         </LineChart>
                     </ResponsiveContainer>
                 </div>
             ) : (
-                <EmptyState title="No financial data" desc="Revenue and expense activity will appear here." />
+                <EmptyState title={t('No financial data')} desc={t('Revenue and expense activity will appear here.')} />
             )}
+
+            <div className="kd-performance__insight">
+                <span className="kd-performance__insight-dot" aria-hidden="true" />
+                <Text type="secondary">{t(summary.message)}</Text>
+            </div>
         </Card>
     );
 }
 
 function ExpenseDonut({ data }) {
+    const t = useTrans();
     const total = data.reduce((s, d) => s + toNum(d.value), 0);
 
     return (
-        <Card className="kd-card kd-chart-side" styles={{ body: { padding: 8 } }}>
-            <div className="kd-card-hdr">
-                <span className="kd-card-hdr__t">Expense Breakdown</span>
-                <Text type="secondary" style={{ fontSize: 11 }}>Where your money goes</Text>
-            </div>
+        <Card
+            size="small"
+            className="kd-card kd-chart-side"
+            title={<CardHeading title={t('Expense breakdown')} subtitle={t('Expenses by category')} />}
+            extra={total > 0 ? <Text strong>{compactMoney(total)}</Text> : null}
+        >
             {data.length > 0 && total > 0 ? (
-                <div style={{ height: 180, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                <div className="kd-donut">
                     <ResponsiveContainer width="100%" height="100%">
                         <PieChart>
-                            <Pie data={data} dataKey="value" nameKey="name" cx="50%" cy="45%"
-                                innerRadius="52%" outerRadius="78%" paddingAngle={2} strokeWidth={0}>
+                            <Pie
+                                data={data}
+                                dataKey="value"
+                                nameKey="name"
+                                cx="50%"
+                                cy="44%"
+                                innerRadius="54%"
+                                outerRadius="76%"
+                                paddingAngle={2}
+                                strokeWidth={0}
+                            >
                                 {data.map((_, i) => <Cell key={i} fill={PIE_PALETTE[i % PIE_PALETTE.length]} />)}
                             </Pie>
                             <ChartTooltip content={<PieTip total={total} />} />
-                            <Legend iconType="circle" iconSize={7} wrapperStyle={{ fontSize: 10, lineHeight: '16px' }}
-                                formatter={(val) => <span style={{ color: 'var(--kd-text)', fontSize: 10 }}>{val}</span>} />
+                            <Legend
+                                iconType="circle"
+                                iconSize={7}
+                                wrapperStyle={{ fontSize: 'var(--kd-font-sm)', lineHeight: '18px' }}
+                                formatter={(val) => <span style={{ color: 'var(--kd-text)', fontSize: 'var(--kd-font-sm)' }}>{val}</span>}
+                            />
                         </PieChart>
                     </ResponsiveContainer>
                 </div>
             ) : (
-                <EmptyState title="No expense data" desc="Expense categories will appear here." compact />
+                <EmptyState title={t('No expense data')} desc={t('Expense categories will appear here.')} compact />
             )}
         </Card>
     );
@@ -407,6 +541,7 @@ function PieTip({ active, payload, total }) {
     if (!active || !payload?.length) return null;
     const d = payload[0];
     const pct = total > 0 ? ((toNum(d.value) / total) * 100).toFixed(1) : 0;
+
     return (
         <div className="kd-tip">
             <Text strong>{d.name}</Text>
@@ -425,63 +560,63 @@ function PieTip({ active, payload, total }) {
 }
 
 function CashFlowChart({ data }) {
+    const t = useTrans();
     const hasData = data.some((d) => toNum(d.cash_in) || toNum(d.cash_out));
 
     return (
-        <Card className="kd-card kd-chart-main" styles={{ body: { padding: 8 } }}>
-            <div className="kd-card-hdr">
-                <span className="kd-card-hdr__t">Cash Flow</span>
-                <Text type="secondary" style={{ fontSize: 11 }}>Daily cash inflows and outflows</Text>
-            </div>
+        <Card
+            size="small"
+            className="kd-card kd-chart-main"
+            title={<CardHeading title={t('Cash flow')} subtitle={t('Cash inflows, outflows and net movement')} />}
+        >
             {hasData ? (
-                <div style={{ height: 170 }}>
+                <div className="kd-chart-standard">
                     <ResponsiveContainer width="100%" height="100%">
-                        <LineChart data={data} margin={{ top: 4, right: 10, bottom: 0, left: 0 }}>
+                        <LineChart data={data} margin={{ top: 8, right: 10, bottom: 0, left: 0 }}>
                             <CartesianGrid stroke="var(--kd-grid)" vertical={false} />
-                            <XAxis dataKey="label" axisLine={false} tickLine={false} tick={{ fill: 'var(--kd-muted)', fontSize: 9 }} />
-                            <YAxis axisLine={false} tickLine={false} tick={{ fill: 'var(--kd-muted)', fontSize: 9 }}
-                                tickFormatter={(v) => compactFmt.format(v)} width={58} />
+                            <XAxis dataKey="label" axisLine={false} tickLine={false} tick={{ fill: 'var(--kd-muted)', fontSize: 'var(--kd-font-sm)' }} />
+                            <YAxis axisLine={false} tickLine={false} tick={{ fill: 'var(--kd-muted)', fontSize: 'var(--kd-font-sm)' }} tickFormatter={(v) => compactFmt.format(v)} width={58} />
                             <ChartTooltip content={<MoneyTip />} />
-                            <Legend iconType="circle" iconSize={7} wrapperStyle={{ fontSize: 11, paddingTop: 4 }} />
-                            <Line type="monotone" dataKey="cash_in" name="Cash In" stroke={THEME_COLOURS.info} strokeWidth={1.8} dot={false} activeDot={{ r: 3 }} />
-                            <Line type="monotone" dataKey="cash_out" name="Cash Out" stroke={THEME_COLOURS.error} strokeWidth={1.8} dot={false} activeDot={{ r: 3 }} />
-                            <Line type="monotone" dataKey="net" name="Net" stroke={THEME_COLOURS.primaryActive} strokeWidth={1.8} strokeDasharray="6 3" dot={false} activeDot={{ r: 3 }} />
+                            <Legend iconType="circle" iconSize={7} wrapperStyle={{ fontSize: 'var(--kd-font-sm)', paddingTop: 4 }} />
+                            <Line type="monotone" dataKey="cash_in" name={t('Cash In')} stroke={THEME_COLOURS.info} strokeWidth={2} dot={false} activeDot={{ r: 3 }} />
+                            <Line type="monotone" dataKey="cash_out" name={t('Cash Out')} stroke={THEME_COLOURS.error} strokeWidth={2} dot={false} activeDot={{ r: 3 }} />
+                            <Line type="monotone" dataKey="net" name={t('Net')} stroke={THEME_COLOURS.primaryActive} strokeWidth={2} strokeDasharray="6 3" dot={false} activeDot={{ r: 3 }} />
                         </LineChart>
                     </ResponsiveContainer>
                 </div>
             ) : (
-                <EmptyState title="No cash flow data" desc="Cash inflows and outflows will appear here." />
+                <EmptyState title={t('No cash flow data')} desc={t('Cash inflows and outflows will appear here.')} />
             )}
         </Card>
     );
 }
 
 function AgeingChart({ data }) {
+    const t = useTrans();
     const hasData = data.some((d) => toNum(d.receivables) > 0 || toNum(d.payables) > 0);
 
     return (
-        <Card className="kd-card kd-chart-side" styles={{ body: { padding: 8 } }}>
-            <div className="kd-card-hdr">
-                <span className="kd-card-hdr__t">Receivables vs Payables Ageing</span>
-                <Text type="secondary" style={{ fontSize: 11 }}>Outstanding amounts by age</Text>
-            </div>
+        <Card
+            size="small"
+            className="kd-card kd-chart-side"
+            title={<CardHeading title={t('Receivables vs payables')} subtitle={t('Outstanding amounts by age')} />}
+        >
             {hasData ? (
-                <div style={{ height: 170 }}>
+                <div className="kd-chart-standard">
                     <ResponsiveContainer width="100%" height="100%">
-                        <BarChart data={data} margin={{ top: 4, right: 6, bottom: 0, left: 0 }}>
+                        <BarChart data={data} margin={{ top: 8, right: 6, bottom: 0, left: 0 }}>
                             <CartesianGrid stroke="var(--kd-grid)" vertical={false} />
-                            <XAxis dataKey="bucket" axisLine={false} tickLine={false} tick={{ fill: 'var(--kd-muted)', fontSize: 9 }} />
-                            <YAxis axisLine={false} tickLine={false} tick={{ fill: 'var(--kd-muted)', fontSize: 9 }}
-                                tickFormatter={(v) => compactFmt.format(v)} width={52} />
+                            <XAxis dataKey="bucket" axisLine={false} tickLine={false} tick={{ fill: 'var(--kd-muted)', fontSize: 'var(--kd-font-sm)' }} />
+                            <YAxis axisLine={false} tickLine={false} tick={{ fill: 'var(--kd-muted)', fontSize: 'var(--kd-font-sm)' }} tickFormatter={(v) => compactFmt.format(v)} width={52} />
                             <ChartTooltip content={<MoneyTip />} />
-                            <Legend iconType="circle" iconSize={7} wrapperStyle={{ fontSize: 10, paddingTop: 4 }} />
-                            <Bar dataKey="receivables" name="Receivables" fill={THEME_COLOURS.info} radius={[4, 4, 0, 0]} maxBarSize={22} />
-                            <Bar dataKey="payables" name="Payables" fill={THEME_COLOURS.warning} radius={[4, 4, 0, 0]} maxBarSize={22} />
+                            <Legend iconType="circle" iconSize={7} wrapperStyle={{ fontSize: 'var(--kd-font-sm)', paddingTop: 4 }} />
+                            <Bar dataKey="receivables" name={t('Receivables')} fill={THEME_COLOURS.info} radius={[4, 4, 0, 0]} maxBarSize={22} />
+                            <Bar dataKey="payables" name={t('Payables')} fill={THEME_COLOURS.warning} radius={[4, 4, 0, 0]} maxBarSize={22} />
                         </BarChart>
                     </ResponsiveContainer>
                 </div>
             ) : (
-                <EmptyState title="No ageing data" desc="Receivable and payable ageing will appear here." compact />
+                <EmptyState title={t('No ageing data')} desc={t('Receivable and payable ageing will appear here.')} compact />
             )}
         </Card>
     );
@@ -489,9 +624,10 @@ function AgeingChart({ data }) {
 
 function MoneyTip({ active, payload, label }) {
     if (!active || !payload?.length) return null;
+
     return (
         <div className="kd-tip">
-            <Text strong style={{ fontSize: 11 }}>{label}</Text>
+            <Text strong className="kd-tip__title">{label}</Text>
             {payload.map((p) => (
                 <div className="kd-tip__row" key={p.dataKey}>
                     <span style={{ background: p.color || p.fill }} />
@@ -504,44 +640,49 @@ function MoneyTip({ active, payload, label }) {
 }
 
 function ModuleOverview({ cards }) {
+    const t = useTrans();
+
     return (
-        <Card className="kd-card kd-modules" styles={{ body: { padding: 0 } }}>
-            <div className="kd-section-head">
+        <section className="kd-section" aria-labelledby="operating-summary-title">
+            <div className="kd-section__head">
                 <div>
-                    <span className="kd-card-hdr__t">Modules</span>
-                    <Text type="secondary">Key operating numbers at a glance</Text>
+                    <Title id="operating-summary-title" level={5}>{t('Operating summary')}</Title>
+                    <Text type="secondary">{t('A quick pulse across the modules you use')}</Text>
                 </div>
             </div>
+
             <div className="kd-modules__grid">
                 {cards.map((card) => {
                     const primary = card.items[0];
                     return (
-                        <article className="kd-module" key={card.key}>
+                        <Card size="small" className="kd-card kd-module" key={card.key}>
                             <div className="kd-module__head">
-                                <Text strong>{card.title}</Text>
+                                <Text strong>{t(card.title)}</Text>
                                 {card.href && (
                                     <Button type="link" size="small" onClick={() => visit(card.href)}>
-                                        View
+                                        {t(card.linkText || 'View')} <ArrowRightOutlined />
                                     </Button>
                                 )}
                             </div>
+
                             <div className="kd-module__primary">
-                                <Text type="secondary">{primary?.label}</Text>
+                                <Text type="secondary">{t(primary?.label)}</Text>
                                 <strong>{formatModuleValue(primary)}</strong>
                             </div>
+
                             <div className="kd-module__facts">
-                                {card.items.slice(1, 4).map((item) => (
+                                {card.items.slice(1).map((item) => (
                                     <span key={item.label}>
-                                        <small>{item.label}</small>
+                                        <small>{t(item.label)}</small>
                                         <b>{formatModuleValue(item)}</b>
                                     </span>
                                 ))}
                             </div>
-                        </article>
+                        </Card>
                     );
                 })}
             </div>
-        </Card>
+        </section>
     );
 }
 
@@ -552,55 +693,73 @@ function formatModuleValue(item) {
     return fmtNum(item.value);
 }
 
+function statusTagColor(status) {
+    const value = String(status || '').toLowerCase();
+    if (['paid', 'posted', 'approved', 'completed', 'active', 'success'].some((x) => value.includes(x))) return 'success';
+    if (['overdue', 'failed', 'rejected', 'cancelled', 'canceled'].some((x) => value.includes(x))) return 'error';
+    if (['pending', 'draft', 'processing', 'in_progress', 'in progress'].some((x) => value.includes(x))) return 'processing';
+    if (['partial', 'upcoming', 'warning'].some((x) => value.includes(x))) return 'warning';
+    return 'default';
+}
+
 function TxnTable({ transactions }) {
+    const t = useTrans();
     const cols = [
-        { title: 'Date', dataIndex: 'date', render: fmtDate, width: 110 },
-        { title: 'Type', dataIndex: 'type', width: 140 },
+        { title: t('Date'), dataIndex: 'date', render: fmtDate, width: 120 },
+        { title: t('Type'), dataIndex: 'type', width: 140 },
         {
-            title: 'Number', dataIndex: 'number',
+            title: t('Number'),
+            dataIndex: 'number',
             render: (n, r) => r.action_url
-                ? <Button type="link" style={{ padding: 0, fontWeight: 600 }} onClick={(e) => { e.stopPropagation(); visit(r.action_url); }}>{n || DASH}</Button>
+                ? <Button type="link" className="kd-table-link" onClick={(e) => { e.stopPropagation(); visit(r.action_url); }}>{n || DASH}</Button>
                 : (n || DASH),
         },
-        { title: 'Party', dataIndex: 'party', ellipsis: true, render: (v) => v || DASH },
-        { title: 'Amount', dataIndex: 'amount', align: 'right', render: (v) => fmtMoney(v) },
+        { title: t('Party'), dataIndex: 'party', ellipsis: true, render: (v) => v || DASH },
+        { title: t('Amount'), dataIndex: 'amount', align: 'right', render: (v) => <Text strong>{fmtMoney(v)}</Text> },
         {
-            title: 'Status', dataIndex: 'status', width: 100,
-            render: (s) => <span className="kd-pill">{s || 'posted'}</span>,
+            title: t('Status'),
+            dataIndex: 'status',
+            width: 110,
+            render: (s) => <Tag color={statusTagColor(s)}>{humanizeLabel(s || 'posted')}</Tag>,
         },
     ];
 
     return (
-        <Card className="kd-card" styles={{ body: { padding: transactions.length ? 0 : 8 } }}>
-            <div className="kd-card-hdr" style={{ padding: transactions.length ? '8px' : 0, borderBottom: transactions.length ? '1px solid var(--kd-grid)' : 'none' }}>
-                <span className="kd-card-hdr__t">Recent Transactions</span>
-                <Text type="secondary" style={{ fontSize: 11 }}>Latest financial documents</Text>
-            </div>
+        <Card
+            size="small"
+            className="kd-card kd-table-card"
+            title={<CardHeading title={t('Recent transactions')} subtitle={t('Latest posted financial documents')} />}
+        >
             {transactions.length > 0 ? (
-                <Table rowKey="key" columns={cols} dataSource={transactions} pagination={false} size="small"
-                    scroll={{ x: 700 }} onRow={(r) => ({ onClick: () => visit(r.action_url), className: r.action_url ? 'kd-row--click' : '' })} />
+                <Table
+                    rowKey="key"
+                    columns={cols}
+                    dataSource={transactions}
+                    pagination={false}
+                    size="small"
+                    scroll={{ x: 760 }}
+                    onRow={(r) => ({
+                        onClick: () => visit(r.action_url),
+                        className: r.action_url ? 'kd-row--click' : '',
+                    })}
+                />
             ) : (
-                <EmptyState title="No recent transactions" desc="Posted documents will appear here." compact />
+                <EmptyState title={t('No recent transactions')} desc={t('Posted documents will appear here.')} compact />
             )}
         </Card>
     );
 }
 
-function TopPartiesBar({ title, data, color }) {
+function TopPartiesBar({ title, subtitle, data, color }) {
     const chartData = data.slice(0, 5).map((d) => ({ ...d, name: truncate(d.name, 18) }));
 
     return (
-        <Card className="kd-card" styles={{ body: { padding: 8 } }}>
-            <div className="kd-card-hdr" style={{ marginBottom: 10 }}>
-                <span className="kd-card-hdr__t">{title}</span>
-            </div>
-            <div style={{ height: 120 }}>
+        <Card size="small" className="kd-card" title={<CardHeading title={title} subtitle={subtitle} />}>
+            <div className="kd-chart-compact">
                 <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={chartData} layout="vertical" margin={{ top: 0, right: 16, bottom: 0, left: 4 }}>
-                        <XAxis type="number" axisLine={false} tickLine={false} tick={{ fill: 'var(--kd-muted)', fontSize: 9 }}
-                            tickFormatter={(v) => compactFmt.format(v)} />
-                        <YAxis type="category" dataKey="name" axisLine={false} tickLine={false} width={96}
-                            tick={{ fill: 'var(--kd-text)', fontSize: 10 }} />
+                    <BarChart data={chartData} layout="vertical" margin={{ top: 2, right: 16, bottom: 0, left: 4 }}>
+                        <XAxis type="number" axisLine={false} tickLine={false} tick={{ fill: 'var(--kd-muted)', fontSize: 'var(--kd-font-sm)' }} tickFormatter={(v) => compactFmt.format(v)} />
+                        <YAxis type="category" dataKey="name" axisLine={false} tickLine={false} width={100} tick={{ fill: 'var(--kd-text)', fontSize: 'var(--kd-font-sm)' }} />
                         <ChartTooltip content={<MoneyTip />} />
                         <Bar dataKey="amount" name="Amount" fill={color} radius={[0, 4, 4, 0]} maxBarSize={16} />
                     </BarChart>
@@ -611,23 +770,27 @@ function TopPartiesBar({ title, data, color }) {
 }
 
 function BankList({ accounts }) {
+    const t = useTrans();
+
     return (
-        <Card className="kd-card" styles={{ body: { padding: 8 } }}>
-            <div className="kd-card-hdr" style={{ marginBottom: 10 }}>
-                <span className="kd-card-hdr__t">Bank Accounts</span>
-            </div>
+        <Card
+            size="small"
+            className="kd-card kd-bank-card"
+            title={<CardHeading title={t('Bank accounts')} subtitle={t('Available balances by account')} />}
+            extra={<Tag>{accounts.length}</Tag>}
+        >
             <div className="kd-bank-list">
                 {accounts.map((a) => (
                     <div className="kd-bank-row" key={a.key}>
-                        <div style={{ minWidth: 0 }}>
-                            <Text style={{ fontWeight: 600, fontSize: 13 }} ellipsis>{a.bank_name || DASH}</Text>
-                            <Text type="secondary" style={{ fontSize: 11, display: 'block' }} ellipsis>
+                        <div className="kd-bank-row__copy">
+                            <Text strong ellipsis>{a.bank_name || DASH}</Text>
+                            <Text type="secondary" ellipsis>
                                 {[a.account_name, a.account_number].filter(Boolean).join(' / ') || DASH}
                             </Text>
                         </div>
-                        <div style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
-                            <Text style={{ fontWeight: 650, fontSize: 13 }}>{fmtMoney(a.balance)}</Text>
-                            {a.currency && <Text type="secondary" style={{ display: 'block', fontSize: 11 }}>{a.currency}</Text>}
+                        <div className="kd-bank-row__amount">
+                            <Text strong>{fmtMoney(a.balance)}</Text>
+                            {a.currency && <Text type="secondary">{a.currency}</Text>}
                         </div>
                     </div>
                 ))}
@@ -638,10 +801,10 @@ function BankList({ accounts }) {
 
 function EmptyState({ title, desc, compact }) {
     return (
-        <div style={{ minHeight: compact ? 105 : 170, display: 'flex', alignItems: 'center', justifyContent: 'center', textAlign: 'center', padding: 10 }}>
+        <div className={`kd-empty${compact ? ' kd-empty--compact' : ''}`}>
             <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={false}>
-                <Title level={5} style={{ margin: '0 0 4px' }}>{title}</Title>
-                <Text type="secondary" style={{ fontSize: 11 }}>{desc}</Text>
+                <Title level={5}>{title}</Title>
+                <Text type="secondary">{desc}</Text>
             </Empty>
         </div>
     );
@@ -649,21 +812,22 @@ function EmptyState({ title, desc, compact }) {
 
 function DashSkeleton() {
     return (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--kd-gap)' }}>
-            <div className="kd-kpis">{[1, 2, 3, 4, 5, 6].map((i) => <Card key={i} className="kd-card" styles={{ body: { padding: 14 } }}><Skeleton active paragraph={{ rows: 1 }} /></Card>)}</div>
+        <div className="kd-skeleton">
+            <div className="kd-kpi-grid">
+                {[1, 2, 3, 4, 5, 6].map((i) => <Card key={i} className="kd-card"><Skeleton active paragraph={{ rows: 1 }} /></Card>)}
+            </div>
             <div className="kd-focus-grid">
-                <Card className="kd-card"><Skeleton active paragraph={{ rows: 7 }} /></Card>
-                <Card className="kd-card"><Skeleton active paragraph={{ rows: 7 }} /></Card>
+                <Card size="small" className="kd-card"><Skeleton active paragraph={{ rows: 8 }} /></Card>
+                <Card size="small" className="kd-card"><Skeleton active paragraph={{ rows: 6 }} /></Card>
+            </div>
+            <div className="kd-signal-grid">
+                {[1, 2, 3, 4].map((i) => <Card key={i} className="kd-card"><Skeleton active paragraph={{ rows: 1 }} /></Card>)}
             </div>
             <div className="kd-cash-expense-row">
-                <Card className="kd-card"><Skeleton active paragraph={{ rows: 5 }} /></Card>
-                <Card className="kd-card"><Skeleton active paragraph={{ rows: 5 }} /></Card>
+                <Card size="small" className="kd-card"><Skeleton active paragraph={{ rows: 6 }} /></Card>
+                <Card size="small" className="kd-card"><Skeleton active paragraph={{ rows: 6 }} /></Card>
             </div>
-            <div className="kd-row-2">
-                <Card className="kd-card"><Skeleton active paragraph={{ rows: 4 }} /></Card>
-                <Card className="kd-card"><Skeleton active paragraph={{ rows: 4 }} /></Card>
-            </div>
-            <Card className="kd-card"><Skeleton active paragraph={{ rows: 4 }} /></Card>
+            <Card size="small" className="kd-card"><Skeleton active paragraph={{ rows: 5 }} /></Card>
         </div>
     );
 }
@@ -675,28 +839,28 @@ function buildModel(data) {
     const chartRaw = data.revenue_expense_profit_chart || [];
     const cashflowRaw = data.cashflow_chart || [];
 
-    const chartData = chartRaw.map((d) => ({
+    const chartData = compactSeries(chartRaw.map((d) => ({
         date: d.date,
         label: d.date ? dayjs(d.date).format('DD MMM') : '',
         revenue: toNum(d.revenue),
         expenses: toNum(d.expenses),
         profit: toNum(d.profit),
-    }));
+    })), ['revenue', 'expenses', 'profit']);
 
-    const cashflowChart = cashflowRaw.map((d) => ({
+    const cashflowChart = compactSeries(cashflowRaw.map((d) => ({
         date: d.date,
         label: d.date ? dayjs(d.date).format('DD MMM') : '',
         cash_in: toNum(d.cash_in),
         cash_out: toNum(d.cash_out),
         net: toNum(d.net),
-    }));
+    })), ['cash_in', 'cash_out', 'net']);
 
-    const revSparkline = chartRaw.map((d) => ({ date: d.date, value: toNum(d.revenue) }));
-    const expSparkline = chartRaw.map((d) => ({ date: d.date, value: toNum(d.expenses) }));
-    const profitSparkline = (sparklines.net_profit || []).map((d) => ({ date: d.date, value: toNum(d.value) }));
-    const cashSparkline = (sparklines.cash_bank || []).map((d) => ({ date: d.date, value: toNum(d.value) }));
-    const recSparkline = (sparklines.receivables || []).map((d) => ({ date: d.date, value: toNum(d.value) }));
-    const paySparkline = (sparklines.payables || []).map((d) => ({ date: d.date, value: toNum(d.value) }));
+    const revSparkline = compactSeries(chartRaw.map((d) => ({ date: d.date, value: toNum(d.revenue) })), ['value']);
+    const expSparkline = compactSeries(chartRaw.map((d) => ({ date: d.date, value: toNum(d.expenses) })), ['value']);
+    const profitSparkline = compactSeries((sparklines.net_profit || []).map((d) => ({ date: d.date, value: toNum(d.value) })), ['value']);
+    const cashSparkline = compactSeries((sparklines.cash_bank || []).map((d) => ({ date: d.date, value: toNum(d.value) })), ['value'], { snapshot: true });
+    const recSparkline = compactSeries((sparklines.receivables || []).map((d) => ({ date: d.date, value: toNum(d.value) })), ['value'], { snapshot: true });
+    const paySparkline = compactSeries((sparklines.payables || []).map((d) => ({ date: d.date, value: toNum(d.value) })), ['value'], { snapshot: true });
 
     const executive = {
         revenue: toNum(fin.revenue),
@@ -713,10 +877,10 @@ function buildModel(data) {
     };
 
     const kpis = [
-        { key: 'revenue', label: 'Revenue', value: fin.revenue, sparkline: revSparkline, color: THEME_COLOURS.primary, trend: calcTrend(revSparkline), helper: 'This period' },
-        { key: 'expenses', label: 'Expenses', value: fin.expenses, sparkline: expSparkline, color: THEME_COLOURS.warning, trend: calcTrend(expSparkline), invertTrend: true, helper: 'This period' },
-        { key: 'profit', label: 'Net Profit', value: fin.net_profit, sparkline: profitSparkline, color: THEME_COLOURS.success, trend: calcTrend(profitSparkline), helper: toNum(fin.revenue) > 0 ? `${((toNum(fin.net_profit) / toNum(fin.revenue)) * 100).toFixed(1)}% margin` : 'This period' },
-        { key: 'cash', label: 'Cash & Bank', value: fin.cash_bank_balance, sparkline: cashSparkline, color: THEME_COLOURS.info, trend: calcTrend(cashSparkline), helper: 'Available' },
+        { key: 'revenue', label: 'Revenue', value: fin.revenue, sparkline: revSparkline, color: THEME_COLOURS.primary, helper: 'This period' },
+        { key: 'expenses', label: 'Expenses', value: fin.expenses, sparkline: expSparkline, color: THEME_COLOURS.warning, invertTrend: true, helper: 'This period' },
+        { key: 'profit', label: 'Net Profit', value: fin.net_profit, sparkline: profitSparkline, color: toNum(fin.net_profit) >= 0 ? THEME_COLOURS.success : THEME_COLOURS.error, helper: toNum(fin.revenue) > 0 ? `${((toNum(fin.net_profit) / toNum(fin.revenue)) * 100).toFixed(1)}% margin` : 'This period' },
+        { key: 'cash', label: 'Cash & Bank', value: fin.cash_bank_balance, sparkline: cashSparkline, color: THEME_COLOURS.info, helper: 'Available' },
         { key: 'receivables', label: 'Receivables', value: fin.receivables, sparkline: recSparkline, color: THEME_COLOURS.info, helper: 'Outstanding' },
         { key: 'payables', label: 'Payables', value: fin.payables, sparkline: paySparkline, color: THEME_COLOURS.error, helper: 'Outstanding' },
     ];
@@ -801,9 +965,9 @@ function buildModel(data) {
     const hrm = data.hrm_summary;
     if (hrm) {
         const items = [{ label: 'Employees', value: hrm.active_employees }];
-        if (hrm.on_leave_today > 0) items.push({ label: 'On leave', value: hrm.on_leave_today });
-        if (hrm.attendance_today > 0) items.push({ label: 'Attendance', value: hrm.attendance_today });
-        if (hrm.payroll_this_period > 0) items.push({ label: 'Payroll', value: hrm.payroll_this_period, format: 'money' });
+        items.push({ label: 'On leave today', value: hrm.on_leave_today });
+        items.push({ label: 'Attendance today', value: hrm.attendance_today });
+        items.push({ label: 'Payroll', value: hrm.payroll_this_period, format: 'money' });
         bizCards.push({ key: 'hrm', title: 'HRM', href: '/hrm/users', linkText: 'View', items });
     }
     const proj = data.project_summary;
@@ -812,8 +976,8 @@ function buildModel(data) {
             { label: 'Active', value: proj.active_projects },
             { label: 'Completed', value: proj.completed_this_period },
         ];
-        if (proj.overdue_tasks > 0) items.push({ label: 'Overdue tasks', value: proj.overdue_tasks });
-        if (proj.billing_value > 0) items.push({ label: 'Billing', value: proj.billing_value, format: 'money' });
+        items.push({ label: 'Overdue tasks', value: proj.overdue_tasks });
+        items.push({ label: 'Billing', value: proj.billing_value, format: 'money' });
         bizCards.push({ key: 'projects', title: 'Projects', href: '/hrm/projects', linkText: 'View', items });
     }
 
@@ -842,41 +1006,47 @@ function buildModel(data) {
 }
 
 function ProjectDeadlines({ approaching, overdue }) {
+    const t = useTrans();
     const cols = (bucket) => [
         {
-            title: 'Project',
+            title: t('Project'),
             dataIndex: 'name',
-            render: (v, row) => <Button type="link" style={{ padding: 0, fontWeight: 600 }} onClick={() => visit(row.action_url)}>{v || DASH}</Button>,
+            render: (v, row) => <Button type="link" className="kd-table-link" onClick={() => visit(row.action_url)}>{v || DASH}</Button>,
         },
-        { title: 'Manager', dataIndex: 'manager', ellipsis: true, render: (v) => v || DASH },
-        { title: 'End Date', dataIndex: 'end_date', width: 120, render: fmtDate },
+        { title: t('Manager'), dataIndex: 'manager', ellipsis: true, render: (v) => v || DASH },
+        { title: t('End Date'), dataIndex: 'end_date', width: 120, render: fmtDate },
         {
-            title: bucket === 'overdue' ? 'Overdue' : 'Time Left',
-            width: 115,
+            title: bucket === 'overdue' ? t('Overdue') : t('Time Left'),
+            width: 120,
             render: (_, row) => bucket === 'overdue'
-                ? `${row.days_overdue || 0} day${Number(row.days_overdue) === 1 ? '' : 's'}`
-                : `${row.days_left || 0} day${Number(row.days_left) === 1 ? '' : 's'}`,
+                ? `${row.days_overdue || 0} ${Number(row.days_overdue) === 1 ? t('day') : t('days')}`
+                : `${row.days_left || 0} ${Number(row.days_left) === 1 ? t('day') : t('days')}`,
         },
-        { title: 'Status', dataIndex: 'status', width: 120, render: (v) => <Tag>{String(v || DASH).replace(/_/g, ' ')}</Tag> },
+        {
+            title: t('Status'),
+            dataIndex: 'status',
+            width: 120,
+            render: (v) => <Tag color={statusTagColor(v)}>{String(v || DASH).replace(/_/g, ' ')}</Tag>,
+        },
     ];
 
     const table = (rows, bucket) => rows.length ? (
-        <Table size="small" rowKey="id" pagination={false} dataSource={rows} columns={cols(bucket)} scroll={{ x: 650 }} />
+        <Table size="small" rowKey="id" pagination={false} dataSource={rows} columns={cols(bucket)} scroll={{ x: 680 }} />
     ) : (
-        <EmptyState title="No projects" desc="Project deadlines that need attention will appear here." compact />
+        <EmptyState title={t('No projects')} desc={t('Project deadlines that need attention will appear here.')} compact />
     );
 
     return (
-        <Card className="kd-card" styles={{ body: { padding: 8 } }}>
-            <div className="kd-card-hdr">
-                <span className="kd-card-hdr__t">Project Deadlines</span>
-                <Text type="secondary" style={{ fontSize: 11 }}>Approaching and overdue internal project dates</Text>
-            </div>
+        <Card
+            size="small"
+            className="kd-card kd-table-card"
+            title={<CardHeading title={t('Project deadlines')} subtitle={t('Approaching and overdue internal project dates')} />}
+        >
             <Tabs
                 size="small"
                 items={[
-                    { key: 'approaching', label: `Approaching Deadline (${approaching.length})`, children: table(approaching, 'approaching') },
-                    { key: 'overdue', label: `Overdue (${overdue.length})`, children: table(overdue, 'overdue') },
+                    { key: 'approaching', label: `${t('Approaching')} (${approaching.length})`, children: table(approaching, 'approaching') },
+                    { key: 'overdue', label: `${t('Overdue')} (${overdue.length})`, children: table(overdue, 'overdue') },
                 ]}
             />
         </Card>
@@ -908,974 +1078,728 @@ function truncate(str, max) {
 }
 
 function Styles({ token }) {
-    return (
-        <style>{`
-            .kd {
-                --kd-bg: ${token.colorBgLayout};
-                --kd-card: ${token.colorBgContainer};
-                --kd-elevated: ${token.colorBgElevated};
-                --kd-soft: ${token.colorFillQuaternary};
-                --kd-soft-strong: ${token.colorFillTertiary};
-                --kd-border: ${token.colorBorderSecondary};
-                --kd-border-strong: ${token.colorBorder};
-                --kd-grid: ${token.colorSplit};
-                --kd-text: ${token.colorText};
-                --kd-muted: ${token.colorTextSecondary};
-                --kd-subtle: ${token.colorTextTertiary};
-                --kd-disabled: ${token.colorTextDisabled};
-                --kd-hover: ${token.controlItemBgHover};
-                --kd-active: ${token.controlItemBgActive};
-                --kd-primary: ${token.colorPrimary};
-                --kd-primary-active: ${token.colorPrimaryActive};
-                --kd-primary-bg: ${token.colorPrimaryBg};
-                --kd-primary-bg-hover: ${token.colorPrimaryBgHover};
-                --kd-success: ${token.colorSuccess};
-                --kd-success-bg: ${token.colorSuccessBg};
-                --kd-warning: ${token.colorWarning};
-                --kd-warning-bg: ${token.colorWarningBg};
-                --kd-error: ${token.colorError};
-                --kd-error-bg: ${token.colorErrorBg};
-                --kd-info: ${token.colorInfo || token.colorPrimary};
-                --kd-info-bg: ${token.colorInfoBg || token.colorPrimaryBg};
-                --kd-shadow: ${token.boxShadowTertiary || token.boxShadowSecondary};
-                --kd-shadow-strong: ${token.boxShadowSecondary || token.boxShadow};
-                --kd-radius: ${token.borderRadiusLG}px;
-                --kd-radius-sm: ${token.borderRadius}px;
-                --kd-radius-xs: ${token.borderRadiusSM}px;
-                --kd-gap: clamp(9px, .8vw, 12px);
-                --kd-pad: clamp(10px, 1vw, 14px);
-                min-height: calc(100vh - 96px);
-                background: var(--kd-bg);
-                padding: clamp(10px, 1.2vw, 16px);
-            }
-            .kd-wrap {
-                width: min(1440px, 100%);
-                margin: 0 auto;
-                display: flex;
-                flex-direction: column;
-                gap: var(--kd-gap);
-            }
+    return <style>{`
+        .kd, .kd-hdr {
+            --kd-bg: ${token.colorBgLayout};
+            --kd-card: ${token.colorBgContainer};
+            --kd-elevated: ${token.colorBgElevated};
+            --kd-soft: ${token.colorFillQuaternary};
+            --kd-soft-strong: ${token.colorFillTertiary};
+            --kd-border: ${token.colorBorderSecondary};
+            --kd-border-strong: ${token.colorBorder};
+            --kd-grid: ${token.colorSplit};
+            --kd-text: ${token.colorText};
+            --kd-muted: ${token.colorTextSecondary};
+            --kd-subtle: ${token.colorTextTertiary};
+            --kd-disabled: ${token.colorTextDisabled};
+            --kd-hover: ${token.controlItemBgHover};
+            --kd-active: ${token.controlItemBgActive};
+            --kd-primary: ${token.colorPrimary};
+            --kd-primary-active: ${token.colorPrimaryActive};
+            --kd-primary-bg: ${token.colorPrimaryBg};
+            --kd-primary-bg-hover: ${token.colorPrimaryBgHover};
+            --kd-success: ${token.colorSuccess};
+            --kd-success-bg: ${token.colorSuccessBg};
+            --kd-warning: ${token.colorWarning};
+            --kd-warning-bg: ${token.colorWarningBg};
+            --kd-error: ${token.colorError};
+            --kd-error-bg: ${token.colorErrorBg};
+            --kd-info: ${token.colorInfo || token.colorPrimary};
+            --kd-info-bg: ${token.colorInfoBg || token.colorPrimaryBg};
+            --kd-shadow: ${token.boxShadowTertiary || token.boxShadowSecondary};
+            --kd-shadow-strong: ${token.boxShadowSecondary || token.boxShadow};
+            --kd-radius: ${token.borderRadiusLG}px;
+            --kd-radius-sm: ${token.borderRadius}px;
+            --kd-radius-xs: ${token.borderRadiusSM}px;
+            --kd-font-sm: ${token.fontSizeSM}px;
+            --kd-font: ${token.fontSize}px;
+            --kd-font-lg: ${token.fontSizeLG}px;
+            --kd-font-xl: ${token.fontSizeXL}px;
+            --kd-metric: ${token.fontSizeHeading3}px;
+            --kd-weight: ${token.fontWeightStrong};
+            --kd-control: ${token.controlHeight}px;
+            font-family: ${token.fontFamily};
+            font-size: ${token.fontSize}px;
+            line-height: ${token.lineHeight};
+        }
 
+        .kd {
+            min-height: 100%;
+            padding: ${token.paddingLG}px;
+            background: var(--kd-bg);
+            color: var(--kd-text);
+        }
+
+        .kd-wrap {
+            width: 100%;
+            max-width: 1600px;
+            margin-inline: auto;
+            display: flex;
+            flex-direction: column;
+            gap: ${token.marginLG}px;
+            min-width: 0;
+        }
+
+        .kd-hdr {
+            width: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: ${token.margin}px;
+            min-width: 0;
+        }
+
+        .kd-hdr__copy {
+            display: grid;
+            gap: ${token.marginXXS}px;
+            min-width: 0;
+        }
+
+        .kd-hdr__copy .ant-typography {
+            margin: 0;
+        }
+
+        .kd-eyebrow {
+            display: block;
+            color: var(--kd-primary);
+            font-size: ${token.fontSizeSM}px;
+            font-weight: ${token.fontWeightStrong};
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+        }
+
+        .kd-hdr__ctl {
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            gap: ${token.marginSM}px;
+            min-width: 0;
+        }
+
+        .kd-hdr__branch { width: 170px; }
+        .kd-hdr__range { width: 250px; }
+
+        .kd-intro {
+            display: flex;
+            align-items: flex-end;
+            justify-content: space-between;
+            gap: ${token.marginLG}px;
+            padding: ${token.paddingLG}px;
+            border: ${token.lineWidth}px solid var(--kd-border);
+            border-radius: var(--kd-radius);
+            background: var(--kd-card);
+            box-shadow: var(--kd-shadow);
+        }
+
+        .kd-intro__copy {
+            display: grid;
+            gap: ${token.marginXS}px;
+            min-width: 0;
+        }
+
+        .kd-intro__title.ant-typography {
+            margin: 0;
+            color: var(--kd-text);
+        }
+
+        .kd-context {
+            display: flex;
+            align-items: stretch;
+            border: ${token.lineWidth}px solid var(--kd-border);
+            border-radius: var(--kd-radius-sm);
+            overflow: hidden;
+            background: var(--kd-soft);
+            flex: 0 0 auto;
+        }
+
+        .kd-context__item {
+            min-width: 150px;
+            display: grid;
+            gap: ${token.marginXXS}px;
+            padding: ${token.paddingSM}px ${token.padding}px;
+        }
+
+        .kd-context__item + .kd-context__item {
+            border-inline-start: ${token.lineWidth}px solid var(--kd-border);
+        }
+
+        .kd-context__item .ant-typography {
+            font-size: ${token.fontSizeSM}px;
+        }
+
+        .kd-context__item strong {
+            color: var(--kd-text);
+            font-weight: ${token.fontWeightStrong};
+            white-space: nowrap;
+        }
+
+        .kd-kpi-grid,
+        .kd-signal-grid,
+        .kd-focus-grid,
+        .kd-cash-expense-row,
+        .kd-row-2,
+        .kd-row-1,
+        .kd-modules__grid {
+            display: grid;
+            gap: ${token.margin}px;
+            min-width: 0;
+        }
+
+        .kd-kpi-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+        .kd-signal-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+        .kd-focus-grid { grid-template-columns: minmax(0, 2fr) minmax(300px, 0.85fr); align-items: stretch; }
+        .kd-cash-expense-row { grid-template-columns: minmax(300px, 0.8fr) minmax(0, 1.35fr); }
+        .kd-row-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        .kd-row-1 { grid-template-columns: minmax(0, 1fr); }
+        .kd-modules__grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+
+        .kd-card.ant-card {
+            min-width: 0;
+            overflow: hidden;
+            border-color: var(--kd-border);
+            background: var(--kd-card);
+            box-shadow: var(--kd-shadow);
+        }
+
+        .kd-card.ant-card .ant-card-head {
+            min-height: auto;
+            padding-inline: ${token.paddingLG}px;
+            border-bottom-color: var(--kd-grid);
+        }
+
+        .kd-card.ant-card .ant-card-head-title,
+        .kd-card.ant-card .ant-card-extra {
+            padding-block: ${token.padding}px;
+        }
+
+        .kd-card.ant-card .ant-card-body {
+            padding: ${token.paddingLG}px;
+        }
+
+        .kd-card-heading {
+            display: grid;
+            gap: ${token.marginXXS}px;
+            white-space: normal;
+        }
+
+        .kd-card-heading__title {
+            color: var(--kd-text);
+            font-size: ${token.fontSizeLG}px;
+            font-weight: ${token.fontWeightStrong};
+            line-height: ${token.lineHeightLG};
+        }
+
+        .kd-card-heading .ant-typography {
+            font-size: ${token.fontSizeSM}px;
+        }
+
+        .kd-kpi.ant-card {
+            position: relative;
+        }
+
+        .kd-kpi.ant-card::before {
+            content: '';
+            position: absolute;
+            inset-inline: 0;
+            top: 0;
+            height: ${token.lineWidthBold || 2}px;
+            background: var(--kd-kpi-accent, var(--kd-primary));
+        }
+
+        .kd-kpi__head,
+        .kd-kpi__footer {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: ${token.marginSM}px;
+        }
+
+        .kd-kpi__head .ant-typography,
+        .kd-kpi__footer > .ant-typography {
+            font-size: ${token.fontSizeSM}px;
+        }
+
+        .kd-kpi__accent {
+            width: ${token.sizeXXS}px;
+            height: ${token.sizeXXS}px;
+            border-radius: 999px;
+            background: var(--kd-kpi-accent, var(--kd-primary));
+            flex: 0 0 auto;
+        }
+
+        .kd-kpi__value {
+            display: block;
+            margin-top: ${token.marginXS}px;
+            color: var(--kd-text);
+            font-size: var(--kd-metric);
+            line-height: 1.2;
+            font-weight: ${token.fontWeightStrong};
+            letter-spacing: -0.02em;
+            overflow-wrap: anywhere;
+        }
+
+        .kd-kpi__footer {
+            margin-top: ${token.marginSM}px;
+        }
+
+        .kd-kpi__trend {
+            width: 44%;
+            min-width: 72px;
+            height: 38px;
+        }
+
+        .kd-kpi__dash {
+            width: 100%;
+            height: 100%;
+            display: grid;
+            place-items: center;
+            color: var(--kd-subtle);
+        }
+
+        .kd-performance.ant-card,
+        .kd-attention.ant-card {
+            height: 100%;
+        }
+
+        .kd-performance > .ant-card-body {
+            display: flex;
+            flex-direction: column;
+            min-height: 0;
+        }
+
+        .kd-performance__stats {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: ${token.marginSM}px;
+            margin-bottom: ${token.marginSM}px;
+        }
+
+        .kd-performance__stats > div {
+            min-width: 0;
+            display: grid;
+            gap: ${token.marginXXS}px;
+            padding: ${token.paddingSM}px ${token.padding}px;
+            border: ${token.lineWidth}px solid var(--kd-border);
+            border-radius: var(--kd-radius-sm);
+            background: var(--kd-soft);
+        }
+
+        .kd-performance__stats .ant-typography {
+            font-size: ${token.fontSizeSM}px;
+        }
+
+        .kd-performance__stats strong {
+            font-size: ${token.fontSizeLG}px;
+            font-weight: ${token.fontWeightStrong};
+            color: var(--kd-text);
+            overflow-wrap: anywhere;
+        }
+
+        .kd-performance__chart {
+            flex: 0 0 auto;
+            height: 310px;
+            min-width: 0;
+        }
+
+        .kd-performance__insight {
+            display: flex;
+            align-items: flex-start;
+            gap: ${token.marginXS}px;
+            margin-top: ${token.marginSM}px;
+            padding-top: ${token.paddingSM}px;
+            border-top: ${token.lineWidth}px solid var(--kd-grid);
+        }
+
+        .kd-performance__insight-dot {
+            width: ${token.sizeXXS}px;
+            height: ${token.sizeXXS}px;
+            margin-top: ${token.marginXXS}px;
+            border-radius: 999px;
+            background: var(--kd-primary);
+            flex: 0 0 auto;
+        }
+
+        .kd-signal {
+            position: relative;
+            display: grid;
+            gap: ${token.marginXXS}px;
+            min-width: 0;
+            padding: ${token.padding}px;
+            border: ${token.lineWidth}px solid var(--kd-border);
+            border-radius: var(--kd-radius);
+            background: var(--kd-card);
+            box-shadow: var(--kd-shadow);
+        }
+
+        .kd-signal__top {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: ${token.marginXS}px;
+        }
+
+        .kd-signal__top .ant-typography,
+        .kd-signal__helper.ant-typography {
+            font-size: ${token.fontSizeSM}px;
+        }
+
+        .kd-signal__dot {
+            width: ${token.sizeXXS}px;
+            height: ${token.sizeXXS}px;
+            border-radius: 999px;
+            background: var(--kd-muted);
+            flex: 0 0 auto;
+        }
+
+        .kd-signal[data-tone='positive'] .kd-signal__dot { background: var(--kd-success); }
+        .kd-signal[data-tone='negative'] .kd-signal__dot { background: var(--kd-error); }
+
+        .kd-signal__value {
+            color: var(--kd-text);
+            font-size: ${token.fontSizeXL}px;
+            line-height: ${token.lineHeightLG};
+            font-weight: ${token.fontWeightStrong};
+            overflow-wrap: anywhere;
+        }
+
+        .kd-attention > .ant-card-body {
+            padding-top: ${token.paddingXS}px;
+        }
+
+        .kd-attention__list {
+            display: grid;
+        }
+
+        .kd-attention__item {
+            width: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: ${token.marginSM}px;
+            padding: ${token.padding}px ${token.paddingXS}px;
+            border: 0;
+            border-bottom: ${token.lineWidth}px solid var(--kd-grid);
+            border-radius: var(--kd-radius-xs);
+            background: transparent;
+            color: var(--kd-text);
+            text-align: start;
+            font: inherit;
+            cursor: pointer;
+            transition: background ${token.motionDurationFast};
+        }
+
+        .kd-attention__item:last-child { border-bottom-color: transparent; }
+        .kd-attention__item:hover { background: var(--kd-hover); }
+        .kd-attention__item:focus-visible { outline: ${token.lineWidthFocus}px solid var(--kd-primary); outline-offset: 1px; }
+
+        .kd-attention__copy {
+            display: grid;
+            gap: ${token.marginXXS}px;
+            min-width: 0;
+        }
+
+        .kd-attention__copy b {
+            font-weight: ${token.fontWeightStrong};
+        }
+
+        .kd-attention__copy small {
+            color: var(--kd-muted);
+            font-size: ${token.fontSizeSM}px;
+        }
+
+        .kd-attention__value {
+            display: flex;
+            align-items: center;
+            gap: ${token.marginXS}px;
+            flex: 0 0 auto;
+        }
+
+        .kd-attention__value strong { font-weight: ${token.fontWeightStrong}; }
+        .kd-attention__value .anticon { color: var(--kd-subtle); font-size: ${token.fontSizeSM}px; }
+
+        .kd-attention__empty {
+            min-height: 230px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: ${token.marginSM}px;
+            padding: ${token.paddingLG}px;
+            text-align: left;
+        }
+
+        .kd-attention__empty > .anticon {
+            color: var(--kd-success);
+            font-size: ${token.fontSizeHeading4}px;
+        }
+
+        .kd-attention__empty > div {
+            display: grid;
+            gap: ${token.marginXXS}px;
+        }
+
+        .kd-donut,
+        .kd-chart-standard {
+            height: 270px;
+        }
+
+        .kd-chart-compact {
+            height: 220px;
+        }
+
+        .kd-section {
+            display: grid;
+            gap: ${token.marginSM}px;
+        }
+
+        .kd-section__head {
+            display: flex;
+            align-items: flex-end;
+            justify-content: space-between;
+            gap: ${token.margin}px;
+        }
+
+        .kd-section__head > div {
+            display: grid;
+            gap: ${token.marginXXS}px;
+        }
+
+        .kd-section__head .ant-typography { margin: 0; }
+
+        .kd-module.ant-card .ant-card-body {
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+        }
+
+        .kd-module__head {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: ${token.marginXS}px;
+            min-height: var(--kd-control);
+            padding-bottom: ${token.paddingSM}px;
+            border-bottom: ${token.lineWidth}px solid var(--kd-grid);
+        }
+
+        .kd-module__head .ant-btn {
+            padding-inline: 0;
+        }
+
+        .kd-module__primary {
+            display: grid;
+            gap: ${token.marginXXS}px;
+            padding-block: ${token.padding}px;
+        }
+
+        .kd-module__primary strong {
+            color: var(--kd-text);
+            font-size: ${token.fontSizeHeading4}px;
+            line-height: ${token.lineHeightHeading4};
+            font-weight: ${token.fontWeightStrong};
+            overflow-wrap: anywhere;
+        }
+
+        .kd-module__facts {
+            display: grid;
+            gap: ${token.marginXS}px;
+            margin-top: auto;
+        }
+
+        .kd-module__facts span {
+            display: flex;
+            align-items: baseline;
+            justify-content: space-between;
+            gap: ${token.marginXS}px;
+        }
+
+        .kd-module__facts small {
+            color: var(--kd-muted);
+            font-size: ${token.fontSizeSM}px;
+        }
+
+        .kd-module__facts b {
+            color: var(--kd-text);
+            font-weight: ${token.fontWeightStrong};
+            text-align: end;
+        }
+
+        .kd-bank-list {
+            display: grid;
+        }
+
+        .kd-bank-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: ${token.marginSM}px;
+            padding-block: ${token.padding}px;
+            border-bottom: ${token.lineWidth}px solid var(--kd-grid);
+        }
+
+        .kd-bank-row:first-child { padding-top: 0; }
+        .kd-bank-row:last-child { padding-bottom: 0; border-bottom: 0; }
+
+        .kd-bank-row__copy,
+        .kd-bank-row__amount {
+            display: grid;
+            gap: ${token.marginXXS}px;
+            min-width: 0;
+        }
+
+        .kd-bank-row__copy .ant-typography,
+        .kd-bank-row__amount .ant-typography {
+            font-size: ${token.fontSizeSM}px;
+        }
+
+        .kd-bank-row__amount {
+            flex: 0 0 auto;
+            text-align: end;
+        }
+
+        .kd-table-card .ant-table-wrapper {
+            margin-inline: -${token.paddingLG}px;
+            margin-bottom: -${token.paddingLG}px;
+        }
+
+        .kd-table-card .ant-table {
+            border-top: ${token.lineWidth}px solid var(--kd-grid);
+        }
+
+        .kd-table-card .ant-table-thead > tr > th {
+            color: var(--kd-muted);
+            font-size: ${token.fontSizeSM}px;
+            font-weight: ${token.fontWeightStrong};
+            background: var(--kd-soft);
+        }
+
+        .kd-table-card .ant-table-tbody > tr > td {
+            border-bottom-color: var(--kd-grid);
+        }
+
+        .kd-table-link.ant-btn {
+            height: auto;
+            padding: 0;
+            font-weight: ${token.fontWeightStrong};
+        }
+
+        .kd-row--click { cursor: pointer; }
+        .kd-row--click:hover > td { background: var(--kd-hover) !important; }
+
+        .kd-tip {
+            min-width: 180px;
+            padding: ${token.paddingSM}px;
+            border: ${token.lineWidth}px solid var(--kd-border);
+            border-radius: var(--kd-radius-sm);
+            background: var(--kd-elevated);
+            box-shadow: var(--kd-shadow-strong);
+        }
+
+        .kd-tip__title.ant-typography {
+            font-size: ${token.fontSizeSM}px;
+        }
+
+        .kd-tip__row {
+            display: grid;
+            grid-template-columns: ${token.sizeXXS}px 1fr auto;
+            align-items: center;
+            gap: ${token.marginXS}px;
+            margin-top: ${token.marginXXS}px;
+        }
+
+        .kd-tip__row > span:first-child {
+            width: ${token.sizeXXS}px;
+            height: ${token.sizeXXS}px;
+            border-radius: 999px;
+        }
+
+        .kd-empty {
+            min-height: 180px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: ${token.padding}px;
+            text-align: center;
+        }
+
+        .kd-empty--compact { min-height: 120px; }
+
+        .kd-empty .ant-empty-description { display: none; }
+        .kd-empty .ant-typography { margin: 0; }
+        .kd-empty .ant-empty-footer { margin-top: ${token.marginXS}px; }
+        .kd-empty .ant-empty-footer .ant-typography { display: block; font-size: ${token.fontSizeSM}px; }
+
+        .kd-skeleton {
+            display: flex;
+            flex-direction: column;
+            gap: ${token.marginLG}px;
+        }
+
+        @media (max-width: 1280px) {
+            .kd-focus-grid { grid-template-columns: minmax(0, 1.55fr) minmax(280px, 0.9fr); }
+            .kd-signal-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        }
+
+        @media (max-width: 1050px) {
+            .kd { padding: ${token.padding}px; }
+            .kd-kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+            .kd-focus-grid,
+            .kd-cash-expense-row,
+            .kd-row-2 { grid-template-columns: minmax(0, 1fr); }
+            .kd-modules__grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+            .kd-intro { align-items: flex-start; flex-direction: column; }
+            .kd-context { width: 100%; }
+            .kd-context__item { flex: 1 1 0; min-width: 0; }
+        }
+
+        @media (max-width: 760px) {
             .kd-hdr {
-                width: 100%;
-                display: flex;
-                align-items: center;
-                justify-content: space-between;
-                gap: var(--kd-gap);
+                align-items: flex-start;
+                flex-direction: column;
             }
+
             .kd-hdr__ctl {
-                display: flex;
-                align-items: center;
-                flex-wrap: wrap;
-                gap: var(--kd-gap);
-            }
-            .kd-hdr__ctl .ant-select,
-            .kd-hdr__ctl .ant-picker,
-            .kd-hdr__ctl .ant-btn {
-                border-radius: var(--kd-radius-sm);
-            }
-            .kd-hdr__ctl .ant-select-selector,
-            .kd-hdr__ctl .ant-picker,
-            .kd-hdr__ctl .ant-btn {
-                min-height: 30px !important;
-            }
-            .kd .ant-card-small > .ant-card-body,
-            .kd .ant-table-small .ant-table-cell {
-                padding-top: ${token.paddingXXS}px !important;
-                padding-bottom: ${token.paddingXXS}px !important;
-            }
-
-            .kd-card {
-                background: var(--kd-card) !important;
-                border: 1px solid var(--kd-border) !important;
-                border-radius: 10px !important;
-                box-shadow: none !important;
-                overflow: hidden;
-                transition: border-color 140ms ease;
-            }
-            .kd-card:hover {
-                border-color: var(--kd-border-strong) !important;
-                box-shadow: none !important;
-            }
-            .kd-card-hdr {
-                display: flex;
-                flex-direction: column;
-                gap: ${token.marginXXS}px;
-                margin-bottom: ${token.marginXS}px;
-            }
-            .kd-card-hdr__t {
-                font-size: ${token.fontSize}px;
-                font-weight: 700;
-                line-height: 1.2;
-                color: var(--kd-text);
-            }
-
-            .kd-hero {
-                position: relative;
-                overflow: hidden;
-                display: grid;
-                grid-template-columns: minmax(0, 1fr) minmax(280px, 420px);
-                gap: clamp(16px, 2vw, 28px);
-                align-items: stretch;
-                padding: clamp(18px, 2.2vw, 28px);
-                border-radius: 18px;
-                border: 1px solid var(--kd-border);
-                border-left: 4px solid var(--kd-primary);
-                background: var(--kd-card);
-                box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
-            }
-            .kd-hero--negative {
-                border-left-color: var(--kd-warning);
-            }
-            .kd-hero__main,
-            .kd-hero__score {
-                position: relative;
-                z-index: 1;
-            }
-            .kd-eyebrow {
-                display: inline-flex;
-                align-items: center;
-                gap: 8px;
-                width: fit-content;
-                color: var(--kd-muted);
-                font-size: 11px;
-                font-weight: 800;
-                letter-spacing: .08em;
-                text-transform: uppercase;
-            }
-            .kd-eyebrow__dot {
-                width: 7px;
-                height: 7px;
-                border-radius: 999px;
-                background: var(--kd-success);
-            }
-            .kd-hero__title {
-                color: var(--kd-text) !important;
-                margin: 12px 0 8px !important;
-                font-size: clamp(25px, 2.5vw, 38px) !important;
-                line-height: 1.08 !important;
-                letter-spacing: -0.035em;
-                max-width: 700px;
-            }
-            .kd-hero__copy {
-                display: block;
-                max-width: 680px;
-                color: var(--kd-muted) !important;
-                font-size: 14px;
-                line-height: 1.6;
-            }
-            .kd-hero__meta {
-                display: flex;
-                flex-wrap: wrap;
-                gap: 8px;
-                margin-top: 18px;
-            }
-            .kd-hero__meta span {
-                display: inline-flex;
-                align-items: center;
-                min-height: 28px;
-                padding: 5px 10px;
-                border-radius: 999px;
-                background: var(--kd-soft);
-                color: var(--kd-muted);
-                font-size: 12px;
-                font-weight: 650;
-            }
-            .kd-hero__score {
-                display: flex;
-                flex-direction: column;
-                justify-content: center;
-                padding: clamp(16px, 2vw, 24px);
-                border-radius: 16px;
-                background: var(--kd-soft);
-                border: 1px solid var(--kd-grid);
-            }
-            .kd-hero__status {
-                width: fit-content;
-                padding: 4px 8px;
-                border-radius: 999px;
-                font-size: 12px;
-                font-weight: 800;
-                line-height: 1;
-            }
-            .kd-hero__status--positive {
-                color: var(--kd-success);
-                background: var(--kd-success-bg);
-            }
-            .kd-hero__status--negative {
-                color: var(--kd-warning);
-                background: var(--kd-warning-bg);
-            }
-            .kd-hero__amount {
-                margin-top: 12px;
-                color: var(--kd-text);
-                font-size: clamp(30px, 3.1vw, 48px);
-                line-height: 1;
-                font-weight: 900;
-                letter-spacing: -0.05em;
-                overflow-wrap: anywhere;
-            }
-            .kd-hero__sub {
-                display: flex;
-                flex-wrap: wrap;
-                gap: 8px;
-                margin-top: 16px;
-            }
-            .kd-hero__sub span {
-                color: var(--kd-muted);
-                font-size: 12px;
-                font-weight: 700;
-            }
-
-            .kd-signal-grid {
-                display: grid;
-                grid-template-columns: repeat(4, minmax(0, 1fr));
-                gap: var(--kd-gap);
-            }
-            .kd-signal {
-                min-height: 132px;
-                position: relative;
-            }
-            .kd-signal::before {
-                content: '';
-                position: absolute;
-                inset: 0 auto 0 0;
-                width: 3px;
-                background: var(--kd-accent);
-                pointer-events: none;
-            }
-            .kd-signal__body {
-                position: relative;
-                z-index: 1;
-                min-height: 132px;
-                padding: 16px;
-                display: flex;
-                flex-direction: column;
-            }
-            .kd-signal__top {
-                display: flex;
-                align-items: center;
-                justify-content: space-between;
-                gap: 8px;
-            }
-            .kd-signal__icon {
-                width: 26px;
-                height: 3px;
-                border-radius: 999px;
-                background: var(--kd-accent);
-            }
-            .kd-signal__trend {
-                display: inline-flex;
-                align-items: center;
-                padding: 3px 7px;
-                border-radius: 999px;
-                color: var(--kd-trend);
-                background: transparent;
-                border: 1px solid var(--kd-border);
-                font-size: 11px;
-                font-weight: 800;
-            }
-            .kd-signal__label {
-                margin-top: 12px;
-                font-size: 11px;
-                font-weight: 800;
-                letter-spacing: .07em;
-                text-transform: uppercase;
-            }
-            .kd-signal__value {
-                margin-top: 6px;
-                color: var(--kd-text);
-                font-size: clamp(21px, 1.7vw, 28px);
-                line-height: 1.05;
-                font-weight: 900;
-                letter-spacing: -0.04em;
-                overflow-wrap: anywhere;
-            }
-            .kd-signal__helper {
-                display: block;
-                margin-top: auto;
-                padding-top: 12px;
-                font-size: 12px;
-            }
-            .kd-signal__spark {
-                position: absolute;
-                right: 0;
-                bottom: 0;
-                width: 58%;
-                height: 42px;
-                opacity: .28;
-                pointer-events: none;
-            }
-
-            .kd-kpis {
-    display: grid;
-    grid-template-columns: repeat(6, minmax(0, 1fr));
-    gap: var(--kd-gap);
-    padding-bottom: 2px;
-}
-    
-            .kd-kpi {
-                min-height: 116px;
-                position: relative;
-            }
-            .kd-kpi::before {
-                content: '';
-                position: absolute;
-                inset: 0;
-                background: var(--kd-soft);
-                opacity: 0.35;
-                pointer-events: none;
-            }
-            .kd-kpi__accent {
-                position: absolute;
-                inset: 0 auto 0 0;
-                width: ${Math.max(token.lineWidthBold || 2, 3)}px;
-                background: var(--kd-accent);
-            }
-            .kd-kpi__content {
-                position: relative;
-                z-index: 1;
-                display: flex;
-                flex-direction: column;
-                min-height: 116px;
-                padding: ${token.paddingXS}px ${token.paddingSM}px ${token.paddingLG}px;
-            }
-            .kd-kpi__top {
-                display: flex;
-                align-items: center;
-                justify-content: space-between;
-                gap: ${token.marginXXS}px;
-            }
-            .kd-kpi__label {
-                font-size: ${token.fontSizeSM}px;
-                font-weight: 600;
-                letter-spacing: ${token.sizeXXS / 200}px;
-                text-transform: uppercase;
-            }
-            .kd-kpi__trend {
-                display: inline-flex;
-                align-items: center;
-                border: 1px solid var(--kd-border);
-                border-radius: ${token.borderRadiusSM}px;
-                background: var(--kd-card);
-                color: var(--kd-trend);
-                font-size: ${token.fontSizeSM}px;
-                line-height: 1;
-                font-weight: 700;
-                padding: 1px ${token.paddingXXS}px;
-                white-space: nowrap;
-            }
-            .kd-kpi__val {
-                color: var(--kd-text);
-                font-size: clamp(${token.fontSizeLG}px, 1.25vw, ${token.fontSizeHeading5}px);
-                font-weight: 800;
-                line-height: 1.1;
-                margin-top: ${token.marginXS}px;
-                overflow-wrap: anywhere;
-            }
-            .kd-kpi__helper {
-                display: block;
-                font-size: ${token.fontSizeSM}px;
-                margin-top: auto;
-                padding-top: ${token.paddingXXS}px;
-            }
-            .kd-kpi__spark {
-                position: absolute;
-                inset: auto 0 0 0;
                 width: 100%;
-                height: 40px;
-                opacity: 0.85;
-                pointer-events: none;
+                flex-wrap: wrap;
+                justify-content: flex-start;
             }
 
-            .kd-row-2,
-            .kd-row-3,
-            .kd-cash-expense-row {
-                display: grid;
-                gap: var(--kd-gap);
-                align-items: stretch;
-            }
-            .kd-main-grid {
-                display: grid;
-                grid-template-columns: minmax(0, 1.45fr) minmax(320px, .75fr);
-                gap: var(--kd-gap);
-                align-items: stretch;
-            }
-            .kd-side-stack {
-                display: grid;
-                grid-template-rows: auto 1fr;
-                gap: var(--kd-gap);
+            .kd-hdr__branch,
+            .kd-hdr__range {
+                flex: 1 1 220px;
+                width: auto;
                 min-width: 0;
             }
-            .kd-insight-grid {
-                display: grid;
-                grid-template-columns: minmax(280px, .7fr) minmax(0, 1fr);
-                gap: var(--kd-gap);
-                align-items: stretch;
-            }
-            .kd-row-1 {
-                display: grid;
-                gap: var(--kd-gap);
+
+            .kd-kpi-grid,
+            .kd-signal-grid,
+            .kd-modules__grid {
                 grid-template-columns: minmax(0, 1fr);
             }
-            .kd-row-2 {
-                grid-template-columns: repeat(2, minmax(0, 1fr));
-            }
-            .kd-row-3 {
-                grid-template-columns: repeat(3, minmax(0, 1fr));
-            }
-            .kd-cash-expense-row {
-                grid-template-columns: minmax(250px, 30%) minmax(0, 70%);
-            }
-            .kd-chart-main,
-            .kd-chart-side {
-                min-height: 222px;
-            }
-            .kd-performance__head {
-                display: flex;
-                align-items: flex-start;
-                justify-content: space-between;
-                gap: 12px;
-                padding: 16px 16px 8px;
-            }
+
             .kd-performance__stats {
-                display: flex;
-                flex-wrap: wrap;
-                justify-content: flex-end;
-                gap: 8px;
-            }
-            .kd-performance__stats span {
-                display: inline-flex;
-                align-items: center;
-                gap: 6px;
-                padding: 5px 8px;
-                border-radius: 999px;
-                color: var(--kd-muted);
-                border: 1px solid var(--kd-border);
-                font-size: 11px;
-                white-space: nowrap;
-            }
-            .kd-performance__stats b {
-                color: var(--kd-text);
-            }
-            .kd-performance__chart {
-                height: 300px;
-                padding: 4px 12px 16px 6px;
-            }
-            .kd-cash-card__head {
-                display: flex;
-                justify-content: space-between;
-                gap: 10px;
-                padding: 16px 16px 6px;
-            }
-            .kd-health-dot {
-                width: 10px;
-                height: 10px;
-                border-radius: 999px;
-                margin-top: 3px;
-                background: var(--kd-health);
-            }
-            .kd-health-dot--good { --kd-health: var(--kd-success); }
-            .kd-health-dot--bad { --kd-health: var(--kd-error); }
-            .kd-cash-card__total {
-                padding: 4px 16px 14px;
-                color: var(--kd-text);
-                font-size: clamp(24px, 2.4vw, 36px);
-                line-height: 1.05;
-                font-weight: 900;
-                letter-spacing: -0.05em;
-                overflow-wrap: anywhere;
-            }
-            .kd-cash-card__rows {
-                display: grid;
-                gap: 1px;
-                background: var(--kd-grid);
-                border-top: 1px solid var(--kd-grid);
-            }
-            .kd-cash-card__row {
-                display: grid;
-                grid-template-columns: 10px 1fr auto;
-                align-items: center;
-                gap: 9px;
-                padding: 9px 16px;
-                background: var(--kd-card);
-                font-size: 12px;
-            }
-            .kd-mini-dot {
-                width: 8px;
-                height: 8px;
-                border-radius: 999px;
-                background: var(--kd-dot);
-            }
-            .kd-mini-dot--good { --kd-dot: var(--kd-success); }
-            .kd-mini-dot--info { --kd-dot: var(--kd-info); }
-            .kd-mini-dot--warn { --kd-dot: var(--kd-warning); }
-            .kd-mini-dot--bad { --kd-dot: var(--kd-error); }
-
-            .kd-biz-grid {
-                display: grid;
-                grid-template-columns: repeat(auto-fit, minmax(235px, 1fr));
-                gap: var(--kd-gap);
-            }
-            .kd-biz-grid--premium {
-                align-items: stretch;
-            }
-            .kd-biz {
-                position: relative;
-            }
-            .kd-biz::before {
-                content: '';
-                position: absolute;
-                inset: 0 auto 0 0;
-                width: 3px;
-                background: var(--kd-primary);
-                opacity: 0.8;
-            }
-            .kd-biz__head {
-                display: flex;
-                align-items: center;
-                justify-content: space-between;
-                gap: ${token.marginXXS}px;
-                margin-bottom: 10px;
-            }
-            .kd-biz__rows {
-                display: grid;
-                grid-template-columns: 1fr 1fr;
-                gap: 8px;
-            }
-            .kd-biz__row {
-                display: flex;
-                flex-direction: column;
-                gap: 3px;
-                min-width: 0;
-                padding: 8px 9px;
-                border: 1px solid var(--kd-grid);
-                border-radius: 10px;
-                background: var(--kd-card);
-            }
-            .kd-biz__row:first-child {
-                grid-column: 1 / -1;
-                background: var(--kd-soft);
-                border-color: var(--kd-border);
+                grid-template-columns: minmax(0, 1fr);
             }
 
-            .kd-bottom {
-                display: grid;
-                grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-                gap: var(--kd-gap);
-            }
+            .kd-performance__chart { height: 260px; }
+            .kd-donut, .kd-chart-standard { height: 240px; }
+        }
 
-            .kd-bank-list {
-                display: flex;
-                flex-direction: column;
-            }
-            .kd-bank-row {
-                display: flex;
-                justify-content: space-between;
-                align-items: center;
-                gap: ${token.marginXS}px;
-                padding: ${token.paddingXXS}px 0;
-                border-bottom: 1px solid var(--kd-grid);
-            }
-            .kd-bank-row:last-child {
-                border-bottom: 0;
-                padding-bottom: 0;
-            }
-
-            .kd-signal {
-                min-height: 104px;
-                border-top: 2px solid var(--kd-accent) !important;
-            }
-            .kd-signal::before,
-            .kd-signal__icon,
-            .kd-signal__spark {
-                display: none;
-            }
-            .kd-signal__body {
-                min-height: 102px;
-                padding: 12px 14px;
-            }
-            .kd-signal__label {
-                margin: 0;
-                font-size: 11px;
-                font-weight: 600;
-                letter-spacing: 0;
-                text-transform: none;
-            }
-            .kd-signal__value {
-                margin-top: 7px;
-                font-size: clamp(20px, 1.5vw, 25px);
-                font-weight: 750;
-                letter-spacing: -0.025em;
-            }
-            .kd-signal__helper {
-                padding-top: 6px;
-                font-size: 10px;
-            }
-            .kd-signal__trend {
-                padding: 0;
-                border: 0;
-                border-radius: 0;
-                font-size: 10px;
-                font-weight: 700;
-            }
-
-            .kd-focus-grid {
-                display: grid;
-                grid-template-columns: minmax(0, 1.75fr) minmax(285px, .75fr);
-                gap: var(--kd-gap);
-                align-items: stretch;
-            }
-            .kd-section-head {
-                min-height: 52px;
-                display: flex;
-                align-items: flex-start;
-                justify-content: space-between;
-                gap: 12px;
-                padding: 12px 14px;
-                border-bottom: 1px solid var(--kd-grid);
-            }
-            .kd-section-head > div {
-                display: grid;
-                gap: 2px;
-            }
-            .kd-section-head .ant-typography {
-                font-size: 10px;
-            }
-            .kd-performance__head {
-                min-height: 52px;
-                align-items: center;
-                padding: 11px 14px;
-                border-bottom: 1px solid var(--kd-grid);
-            }
-            .kd-performance__stats {
-                gap: 10px;
-            }
-            .kd-performance__stats span {
-                padding: 0;
-                border: 0;
-                border-radius: 0;
-                font-size: 10px;
-            }
-            .kd-performance__chart {
-                height: 238px;
-                padding: 10px 12px 12px 4px;
-            }
-
-            .kd-status {
-                display: inline-flex;
-                align-items: center;
-                min-height: 22px;
-                padding: 2px 7px;
-                border-radius: 999px;
-                font-size: 10px;
-                font-weight: 650;
-                white-space: nowrap;
-            }
-            .kd-status--warn {
-                color: var(--kd-warning);
-                background: var(--kd-warning-bg);
-            }
-            .kd-status--good {
-                color: var(--kd-success);
-                background: var(--kd-success-bg);
-            }
-            .kd-liquidity {
-                display: flex;
-                align-items: flex-end;
-                justify-content: space-between;
-                gap: 10px;
-                padding: 12px 14px;
-                border-bottom: 1px solid var(--kd-grid);
-            }
-            .kd-liquidity > div {
-                display: grid;
-                gap: 3px;
-            }
-            .kd-liquidity .ant-typography {
-                font-size: 10px;
-            }
-            .kd-liquidity strong {
-                color: var(--kd-text);
-                font-size: 20px;
-                line-height: 1.1;
-                letter-spacing: -.025em;
-            }
-            .kd-attention__list {
-                display: grid;
-            }
-            .kd-attention__item {
-                appearance: none;
-                width: 100%;
-                min-height: 49px;
-                display: flex;
-                align-items: center;
-                justify-content: space-between;
-                gap: 12px;
-                padding: 8px 14px;
-                border: 0;
-                border-bottom: 1px solid var(--kd-grid);
-                background: transparent;
-                color: var(--kd-text);
-                text-align: left;
-                cursor: pointer;
-            }
-            .kd-attention__item:last-child {
-                border-bottom: 0;
-            }
-            .kd-attention__item:hover {
-                background: var(--kd-hover);
-            }
-            .kd-attention__item > span {
-                min-width: 0;
-                display: grid;
-                gap: 1px;
-            }
-            .kd-attention__item b,
-            .kd-attention__item strong {
-                font-size: 11px;
-                font-weight: 650;
-            }
-            .kd-attention__item small {
-                color: var(--kd-muted);
-                font-size: 10px;
-            }
-            .kd-attention__item strong {
-                white-space: nowrap;
-            }
-            .kd-attention__empty {
-                min-height: 86px;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                gap: 8px;
-                padding: 14px;
-            }
-
-            .kd-modules__grid {
-                display: grid;
-                grid-template-columns: repeat(3, minmax(0, 1fr));
-            }
-            .kd-module {
-                min-width: 0;
-                padding: 11px 14px 12px;
-                border-right: 1px solid var(--kd-grid);
-                border-bottom: 1px solid var(--kd-grid);
-            }
-            .kd-module:nth-child(3n) {
-                border-right: 0;
-            }
-            .kd-module:nth-last-child(-n + 3) {
-                border-bottom: 0;
-            }
-            .kd-module__head {
-                display: flex;
-                align-items: center;
-                justify-content: space-between;
-                gap: 8px;
-            }
-            .kd-module__head > .ant-typography {
-                font-size: 12px;
-            }
-            .kd-module__head .ant-btn {
-                height: auto;
-                padding: 0;
-                font-size: 10px;
-            }
-            .kd-module__primary {
-                display: grid;
-                gap: 2px;
-                margin-top: 8px;
-            }
-            .kd-module__primary .ant-typography {
-                font-size: 10px;
-            }
-            .kd-module__primary strong {
-                color: var(--kd-text);
-                font-size: 18px;
-                line-height: 1.15;
-                letter-spacing: -.02em;
-            }
-            .kd-module__facts {
-                display: flex;
-                flex-wrap: wrap;
-                gap: 6px 14px;
-                margin-top: 9px;
-            }
-            .kd-module__facts span {
-                display: inline-flex;
-                align-items: baseline;
-                gap: 4px;
-            }
-            .kd-module__facts small {
-                color: var(--kd-muted);
-                font-size: 9px;
-            }
-            .kd-module__facts b {
-                color: var(--kd-text);
-                font-size: 10px;
-                font-weight: 650;
-            }
-
-            .kd .ant-table-small .ant-table-cell {
-                padding: 7px 10px !important;
-                font-size: 11px;
-            }
-            .kd .ant-table-wrapper .ant-table-thead > tr > th {
-                font-size: 10px;
-                font-weight: 650;
-            }
-
-            .kd-pill {
-                display: inline-flex;
-                align-items: center;
-                padding: 1px ${token.paddingXXS}px;
-                border: 1px solid var(--kd-border);
-                border-radius: var(--kd-radius-sm);
-                color: var(--kd-muted);
-                background: var(--kd-soft);
-                font-size: ${token.fontSizeSM}px;
-                line-height: 1.15;
-                text-transform: capitalize;
-            }
-            .kd-row--click {
-                cursor: pointer;
-            }
-            .kd-row--click:hover td {
-                background: var(--kd-hover) !important;
-            }
-            .kd .ant-table-wrapper .ant-table,
-            .kd .ant-table-wrapper .ant-table-container,
-            .kd .ant-table-wrapper .ant-table-thead > tr > th {
-                background: var(--kd-card) !important;
-            }
-            .kd .ant-table-wrapper .ant-table-thead > tr > th {
-                color: var(--kd-muted) !important;
-                font-weight: 700;
-            }
-            .kd .ant-tabs-nav {
-                margin-bottom: ${token.marginXS}px;
-            }
-
-            .kd-tip {
-                min-width: 160px;
-                padding: ${token.paddingXS}px;
-                background: var(--kd-elevated);
-                border: 1px solid var(--kd-border);
-                border-radius: var(--kd-radius);
-                box-shadow: var(--kd-shadow-strong);
-            }
-            .kd-tip__row {
-                display: grid;
-                grid-template-columns: ${token.sizeXXS}px 1fr auto;
-                align-items: center;
-                gap: ${token.marginXXS}px;
-                margin-top: ${token.marginXXS}px;
-                font-size: ${token.fontSizeSM}px;
-            }
-            .kd-tip__row span:first-child {
-                width: ${token.sizeXXS}px;
-                height: ${token.sizeXXS}px;
-                border-radius: 999px;
-            }
-
-            .kd .recharts-default-legend {
-                color: var(--kd-muted);
-            }
-            .kd .recharts-cartesian-axis-tick-value {
-                fill: var(--kd-muted);
-            }
-
-            @media (max-width: 1280px) {
-                .kd-signal-grid {
-                    grid-template-columns: repeat(2, minmax(0, 1fr));
-                }
-                .kd-kpis {
-                    grid-template-columns: repeat(3, minmax(0, 1fr));
-                }
-                .kd-hero,
-                .kd-focus-grid,
-                .kd-main-grid,
-                .kd-insight-grid,
-                .kd-row-2,
-                .kd-row-3,
-                .kd-cash-expense-row {
-                    grid-template-columns: minmax(0, 1fr);
-                }
-                .kd-performance__chart {
-                    height: 238px;
-                }
-                .kd-modules__grid {
-                    grid-template-columns: repeat(2, minmax(0, 1fr));
-                }
-                .kd-module:nth-child(3n) { border-right: 1px solid var(--kd-grid); }
-                .kd-module:nth-child(2n) { border-right: 0; }
-                .kd-module:nth-last-child(-n + 3) { border-bottom: 1px solid var(--kd-grid); }
-                .kd-module:nth-last-child(-n + 2) { border-bottom: 0; }
-            }
-            @media (max-width: 768px) {
-                .kd {
-                    padding: ${token.paddingXS}px;
-                }
-                .kd-hero {
-                    border-radius: 22px;
-                    padding: 18px;
-                }
-                .kd-hero__score {
-                    padding: 16px;
-                }
-                .kd-hdr {
-                    flex-direction: column;
-                    align-items: flex-start;
-                }
-                .kd-hdr__ctl,
-                .kd-hdr__ctl .ant-picker {
-                    width: 100% !important;
-                }
-                .kd-hdr__ctl .ant-select {
-                    width: 100% !important;
-                }
-                .kd-kpis {
-                    grid-template-columns: repeat(2, minmax(0, 1fr));
-                }
-                .kd-signal-grid,
-                .kd-biz-grid,
-                .kd-bottom {
-                    grid-template-columns: minmax(0, 1fr);
-                }
-                .kd-modules__grid {
-                    grid-template-columns: minmax(0, 1fr);
-                }
-                .kd-module,
-                .kd-module:nth-child(2n),
-                .kd-module:nth-child(3n),
-                .kd-module:nth-last-child(-n + 2) {
-                    border-right: 0;
-                    border-bottom: 1px solid var(--kd-grid);
-                }
-                .kd-module:last-child {
-                    border-bottom: 0;
-                }
-                .kd-performance__head,
-                .kd-performance__stats {
-                    align-items: flex-start;
-                    justify-content: flex-start;
-                }
-                .kd-performance__head {
-                    flex-direction: column;
-                }
-                .kd-biz__rows {
-                    grid-template-columns: minmax(0, 1fr);
-                }
-            }
-            @media (max-width: 520px) {
-                .kd-kpis {
-                    grid-template-columns: minmax(0, 1fr);
-                }
-                .kd-card-hdr__t {
-                    font-size: ${token.fontSize}px;
-                }
-            }
-        `}</style>
-    );
+        @media (max-width: 520px) {
+            .kd { padding: ${token.paddingSM}px; }
+            .kd-wrap { gap: ${token.margin}px; }
+            .kd-intro { padding: ${token.padding}px; }
+            .kd-context { flex-direction: column; }
+            .kd-context__item + .kd-context__item {
+                border-inline-start: 0;
+                border-top: ${token.lineWidth}px solid var(--kd-border);
+            }
+            .kd-card.ant-card .ant-card-head,
+            .kd-card.ant-card .ant-card-body { padding-inline: ${token.padding}px; }
+            .kd-table-card .ant-table-wrapper {
+                margin-inline: -${token.padding}px;
+                margin-bottom: -${token.paddingLG}px;
+            }
+            .kd-kpi__trend { width: 40%; }
+        }
+    `}</style>;
 }

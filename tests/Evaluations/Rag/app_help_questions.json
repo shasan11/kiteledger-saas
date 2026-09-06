@@ -1,0 +1,91 @@
+{
+  "name": "KiteLedger app-help retrieval",
+  "version": 1,
+  "description": "Realistic questions a business user asks about using KiteLedger. Each case names the curated help chunk that should be retrieved. Thresholds are enforced by tests/Feature/Ai/RagRetrievalEvaluationTest.php; change a threshold only with a recorded reason, never to make a regression pass.",
+  "cases": [
+    {
+      "id": "help-invoice-001",
+      "question": "How do I create an invoice?",
+      "expected_title": "Create Invoice Workflow",
+      "expected_module": "Sales",
+      "expected_route": "/payment-in/invoices"
+    },
+    {
+      "id": "help-invoice-002",
+      "question": "Where do I raise a new sales invoice for a customer?",
+      "expected_title": "Create Invoice Workflow",
+      "expected_module": "Sales"
+    },
+    {
+      "id": "help-trial-balance-001",
+      "question": "Where is the trial balance report?",
+      "expected_title": "Trial Balance Report",
+      "expected_module": "Reports",
+      "expected_route": "/reports/accounting/trial-balance"
+    },
+    {
+      "id": "help-trial-balance-002",
+      "question": "How do I check that debits and credits balance for the period?",
+      "expected_title": "Trial Balance Report",
+      "expected_module": "Reports"
+    },
+    {
+      "id": "help-cheque-001",
+      "question": "How do I configure the cheque printing layout?",
+      "expected_title": "Cheque Format Settings",
+      "expected_module": "Settings",
+      "expected_route": "/settings/cheque-formats"
+    },
+    {
+      "id": "help-gateway-001",
+      "question": "How do I set up a payment gateway?",
+      "expected_title": "Payment Gateway Setup",
+      "expected_module": "Settings",
+      "expected_route": "/settings/payment-gateways"
+    },
+    {
+      "id": "help-gateway-002",
+      "question": "Where do I enter my Stripe credentials for online payments?",
+      "expected_title": "Payment Gateway Setup",
+      "expected_module": "Settings"
+    },
+    {
+      "id": "help-customer-payment-001",
+      "question": "How do I record a customer payment against an invoice?",
+      "expected_title": "Customer Payment Workflow",
+      "expected_module": "Sales",
+      "expected_route": "/payment-in/customer-payments"
+    },
+    {
+      "id": "help-quotation-001",
+      "question": "What is the difference between a sales order and a quotation?",
+      "expected_title": "Quotation and Sales Order Difference",
+      "expected_module": "Sales"
+    },
+    {
+      "id": "help-unpaid-001",
+      "question": "Why is an invoice still showing as unpaid?",
+      "expected_title": "Unpaid Invoices",
+      "expected_module": "Sales"
+    },
+    {
+      "id": "help-lowstock-001",
+      "question": "How do I see which products are below their reorder level?",
+      "expected_title": "Inventory Low Stock",
+      "expected_module": "Inventory"
+    },
+    {
+      "id": "help-branch-001",
+      "question": "How does branch scope limit what a user can see?",
+      "expected_title": "Branch Scope",
+      "expected_module": "Administration"
+    },
+    {
+      "id": "help-ai-001",
+      "question": "Where do I turn on the KiteLedger Copilot?",
+      "expected_title": "KiteLedger Copilot Settings",
+      "expected_module": "Settings",
+      "expected_route": "/settings/ai"
+    }
+  ]
+}

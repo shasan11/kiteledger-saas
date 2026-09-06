@@ -16,6 +16,7 @@ use App\Services\Documents\DocumentReviewSchemaBuilder;
 use App\Services\Documents\DocumentTransactionConverter;
 use App\Services\Documents\DocumentTransactionPayloadValidator;
 use App\Services\Documents\DocumentTransactionProposalService;
+use App\Support\Money\CurrencyFormatter;
 use Illuminate\Http\Request;
 
 class DocumentProposalController extends Controller
@@ -29,6 +30,7 @@ class DocumentProposalController extends Controller
         protected DocumentReviewSchemaBuilder $schemaBuilder,
         protected DocumentTransactionPayloadValidator $validator,
         protected BranchScopeService $branchScope,
+        protected CurrencyFormatter $currency,
     ) {}
 
     public function index(Request $request, string $publicId)
@@ -248,7 +250,25 @@ class DocumentProposalController extends Controller
             'confidence' => $review['confidence'],
             'review_schema' => $review['review_schema'],
             'can_convert' => empty($review['missing_fields']),
+            // The document's own currency when it stated one, the tenant's base
+            // currency otherwise. Sent as code + symbol + precision so the
+            // review screen shows real amounts instead of bare numbers.
+            'currency' => $this->currency->info($this->documentCurrencyCode($normalized))->toArray(),
         ];
+    }
+
+    /**
+     * The currency the document itself declared, if the extractor read one.
+     *
+     * @param  array<string, mixed>  $normalized
+     */
+    private function documentCurrencyCode(array $normalized): ?string
+    {
+        $value = $normalized['fields']['currency_code']['value']
+            ?? $normalized['currency_code']
+            ?? null;
+
+        return is_string($value) && trim($value) !== '' ? $value : null;
     }
 
     private function findDocument(string $publicId, array $with = []): DocumentUpload

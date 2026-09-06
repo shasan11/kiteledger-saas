@@ -35,9 +35,25 @@ class PlatformSettingsSeeder extends Seeder
             }
         }
 
-        $this->alias('platform.name', 'general', 'Platform name', 'KiteLedger SaaS');
+        $this->removeLegacyPlatformNameAlias();
         $this->alias('billing.currency', 'billing', 'Default currency', env('SAAS_BILLING_CURRENCY', 'USD'));
         $this->alias('tenant.allow_public_signup', 'tenant_registration', 'Allow public signup', false, 'boolean', 'switch');
+    }
+
+    private function removeLegacyPlatformNameAlias(): void
+    {
+        $legacy = PlatformSetting::where('key', 'platform.name')->first();
+        if (! $legacy) {
+            return;
+        }
+
+        $canonical = PlatformSetting::where('key', 'general.platform_name')->first();
+        $legacyValue = $legacy->safeValue();
+        if ($canonical && filled($legacyValue) && $legacyValue !== 'KiteLedger SaaS' && in_array($canonical->safeValue(), [null, '', 'KiteLedger SaaS'], true)) {
+            $canonical->forceFill(['value' => $legacyValue])->save();
+        }
+
+        $legacy->delete();
     }
 
     private function alias(string $key, string $group, string $label, mixed $value, string $type = 'string', string $input = 'text'): void

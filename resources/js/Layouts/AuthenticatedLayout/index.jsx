@@ -12,7 +12,6 @@ import {
     InfoCircleOutlined,
     ProfileOutlined,
     ProjectOutlined,
-    RobotOutlined,
     SettingOutlined,
     ShopOutlined,
     SwapOutlined,
@@ -20,6 +19,7 @@ import {
     UserOutlined,
     WalletOutlined,
 } from '@ant-design/icons';
+import CopilotMark from '@/Components/AI/CopilotMark';
 import { Alert, Button, Grid, Layout, theme } from 'antd';
 import { useEffect, useMemo, useState } from 'react';
 
@@ -41,6 +41,7 @@ export default function AuthenticatedLayout({ header, children }) {
     const can = (permission) => canBypass || permissions.includes(permission);
     const screens = useBreakpoint();
     const isMobile = !screens.md;
+    const isHrmPage = page.url.startsWith('/hrm');
 
     const [collapsed, setCollapsed] = useState(false);
     const [branch, setBranch] = useState(branchContext.selectedBranchId || null);
@@ -106,7 +107,7 @@ export default function AuthenticatedLayout({ header, children }) {
                 ? [
                       {
                           key: 'ai-copilot',
-                          icon: <RobotOutlined />,
+                          icon: <CopilotMark size={18} />,
                           label: 'KiteLedger Copilot',
                           onClick: () => visit('ai.assistant', '/ai/assistant'),
                       },
@@ -573,15 +574,6 @@ export default function AuthenticatedLayout({ header, children }) {
                         onClick: () => visit('hrm.payroll.index', '/hrm/payroll'),
                     },
                     {
-                        key: 'hrm-emp-docs',
-                        label: 'Employee Documents',
-                        onClick: () =>
-                            visit(
-                                'hrm.employee-documents.index',
-                                '/hrm/employee-documents',
-                            ),
-                    },
-                    {
                         key: 'hrm-onboarding',
                         label: 'Onboarding',
                         onClick: () =>
@@ -661,7 +653,9 @@ export default function AuthenticatedLayout({ header, children }) {
     const selectedKeys = useMemo(() => {
         if (isActive('/dashboard')) return ['home'];
 
-        if (isActive('/documents/upload')) return ['ai-document-upload'];
+        // The review workspace has a document id between `/documents` and
+        // `/review`, so it cannot be matched by the upload URL alone.
+        if (isActive('/documents')) return ['ai-document-upload'];
 
         if (isActive('/pos')) return ['pos'];
 
@@ -738,7 +732,6 @@ export default function AuthenticatedLayout({ header, children }) {
         if (isActive('/hrm/attendance')) return ['hrm-attendance'];
         if (isActive('/hrm/leave-applications')) return ['hrm-leaves'];
         if (isActive('/hrm/payroll')) return ['hrm-payroll'];
-        if (isActive('/hrm/employee-documents')) return ['hrm-emp-docs'];
         if (isActive('/hrm/onboarding')) return ['hrm-onboarding'];
         if (isActive('/hrm/departments')) return ['settings-hrm-setup'];
         if (isActive('/hrm/designations')) return ['settings-hrm-setup'];
@@ -964,6 +957,7 @@ export default function AuthenticatedLayout({ header, children }) {
                 >
                     {header && (
                         <div
+                            className={isHrmPage ? 'app-layout-header--hrm' : undefined}
                             style={{
                                 padding: '9px 18px',
                                 background: colorBgContainer,
@@ -975,6 +969,7 @@ export default function AuthenticatedLayout({ header, children }) {
                     )}
 
                     <Content
+                        className={isHrmPage ? 'app-content--hrm' : undefined}
                         style={{
                             minHeight: 'calc(100vh - 100px)',
                             minWidth: 0,

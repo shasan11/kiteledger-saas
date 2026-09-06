@@ -1,12 +1,13 @@
 import { useState } from 'react';
 import { Button, Empty, Space, Tooltip, Typography, theme } from 'antd';
 import {
-    DownloadOutlined,
+    ExportOutlined,
     FileTextOutlined,
     RotateRightOutlined,
     ZoomInOutlined,
     ZoomOutOutlined,
 } from '@ant-design/icons';
+import { getDocumentStatusIconColor } from './DocumentStatusTag';
 
 const { Text } = Typography;
 
@@ -33,58 +34,75 @@ export default function DocumentPreview({ document: doc, onDownload }) {
     const isImage = mime.startsWith('image/');
 
     const toolbar = (
-        <Space size={4} style={{ padding: 8, borderBottom: `1px solid ${token.colorBorderSecondary}` }}>
-            <Tooltip title="Zoom out">
-                <Button
-                    size="small"
-                    type="text"
-                    icon={<ZoomOutOutlined />}
-                    disabled={zoom <= 0.5}
-                    onClick={() => setZoom((z) => Math.max(0.5, z - 0.25))}
-                />
-            </Tooltip>
-            <Text type="secondary" style={{ fontSize: 12, minWidth: 42, textAlign: 'center' }}>
-                {Math.round(zoom * 100)}%
-            </Text>
-            <Tooltip title="Zoom in">
-                <Button
-                    size="small"
-                    type="text"
-                    icon={<ZoomInOutlined />}
-                    disabled={zoom >= 3}
-                    onClick={() => setZoom((z) => Math.min(3, z + 0.25))}
-                />
-            </Tooltip>
-
-            {isImage && (
-                <Tooltip title="Rotate">
-                    <Button
-                        size="small"
-                        type="text"
-                        icon={<RotateRightOutlined />}
-                        onClick={() => setRotation((r) => (r + 90) % 360)}
-                    />
-                </Tooltip>
-            )}
+        <div className="document-preview__toolbar" style={{ width: '100%', padding: 6, borderBottom: `1px solid ${token.colorBorderSecondary}` }}>
+            <Space size={7} className="document-preview__identity">
+                <span className="document-preview__identity-icon"><FileTextOutlined /></span>
+                <Text strong className="document-preview__identity-label">Original document</Text>
+            </Space>
 
             <div style={{ flex: 1 }} />
 
-            <Tooltip title="Download original">
+            {isImage && (
+                <Space size={2}>
+                    <Tooltip title="Zoom out">
+                        <Button
+                            size="small"
+                            type="text"
+                            icon={<ZoomOutOutlined />}
+                            aria-label="Zoom out"
+                            disabled={zoom <= 0.5}
+                            onClick={() => setZoom((z) => Math.max(0.5, z - 0.25))}
+                        />
+                    </Tooltip>
+                    <Button
+                        size="small"
+                        type="text"
+                        className="document-preview__zoom-value"
+                        onClick={() => setZoom(1)}
+                        title="Reset zoom"
+                    >
+                        {Math.round(zoom * 100)}%
+                    </Button>
+                    <Tooltip title="Zoom in">
+                        <Button
+                            size="small"
+                            type="text"
+                            icon={<ZoomInOutlined />}
+                            aria-label="Zoom in"
+                            disabled={zoom >= 3}
+                            onClick={() => setZoom((z) => Math.min(3, z + 0.25))}
+                        />
+                    </Tooltip>
+                    <Tooltip title="Rotate clockwise">
+                        <Button
+                            size="small"
+                            type="text"
+                            icon={<RotateRightOutlined />}
+                            aria-label="Rotate clockwise"
+                            onClick={() => setRotation((r) => (r + 90) % 360)}
+                        />
+                    </Tooltip>
+                </Space>
+            )}
+
+            <Tooltip title="Open original in a new tab">
                 <Button
                     size="small"
                     type="text"
-                    icon={<DownloadOutlined />}
+                    icon={<ExportOutlined />}
+                    aria-label="Open original in a new tab"
                     onClick={() => onDownload?.(doc)}
                 />
             </Tooltip>
-        </Space>
+        </div>
     );
 
     return (
         <div
+            className="document-preview"
             style={{
                 border: `1px solid ${token.colorBorderSecondary}`,
-                borderRadius: token.borderRadiusLG,
+                borderRadius: 0,
                 background: token.colorBgContainer,
                 display: 'flex',
                 flexDirection: 'column',
@@ -93,24 +111,17 @@ export default function DocumentPreview({ document: doc, onDownload }) {
                 minHeight: 420,
             }}
         >
-            {canRenderInline && toolbar}
+            {toolbar}
 
-            <div style={{ flex: 1, overflow: 'auto', background: token.colorFillQuaternary }}>
+            <div className="document-preview__canvas" style={{ flex: 1, overflow: 'auto', background: token.colorFillQuaternary }}>
                 {!canRenderInline && (
                     <div style={{ padding: 32 }}>
                         <Empty
-                            image={<FileTextOutlined style={{ fontSize: 40, color: token.colorTextTertiary }} />}
-                            description={
-                                <Space direction="vertical" size={4}>
-                                    <Text>This file type cannot be shown here</Text>
-                                    <Text type="secondary" style={{ fontSize: 12 }}>
-                                        {doc.original_file_name}
-                                    </Text>
-                                </Space>
-                            }
+                            image={<FileTextOutlined style={{ fontSize: 40, color: getDocumentStatusIconColor(doc.status, token) }} />}
+                            description={<Text>This file type cannot be shown here</Text>}
                         >
-                            <Button icon={<DownloadOutlined />} onClick={() => onDownload?.(doc)}>
-                                Download original
+                            <Button icon={<ExportOutlined />} onClick={() => onDownload?.(doc)}>
+                                Open original
                             </Button>
                         </Empty>
                     </div>

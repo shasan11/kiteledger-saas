@@ -32,6 +32,18 @@ class AiUsageLogger
             'date_range'        => $data['date_range']        ?? null,
             'row_count'         => $data['row_count']         ?? null,
             'token_estimate'    => $data['token_estimate']    ?? null,
+
+            // Structured telemetry. Every field is optional so existing callers
+            // keep working unchanged; a null simply means "not measured here".
+            'request_id'             => $data['request_id']             ?? null,
+            'feature'                => $data['feature']                ?? null,
+            'error_code'             => $data['error_code']             ?? null,
+            'fallback_provider'      => $data['fallback_provider']      ?? null,
+            'cache_hit'              => (bool) ($data['cache_hit']      ?? false),
+            'first_token_ms'         => $data['first_token_ms']         ?? null,
+            'retrieval_ms'           => $data['retrieval_ms']           ?? null,
+            'retrieval_source_count' => $data['retrieval_source_count'] ?? null,
+            'document_page_count'    => $data['document_page_count']    ?? null,
         ]);
     }
 

@@ -2,6 +2,7 @@
 
 namespace App\Services\AI;
 
+use App\Services\AI\Providers\AiProviderCapabilityRegistry;
 use App\Services\SaaS\PlatformSettingsService;
 
 class AiSettingsService
@@ -17,7 +18,10 @@ class AiSettingsService
         'ai_max_tokens' => 500,
         'ai_timeout_seconds' => 180,
         'ai_connect_timeout_seconds' => 15,
-        'ai_stream_enabled' => false,
+        // Streaming is now genuine token streaming, and the client falls back to
+        // the plain JSON endpoint by itself when a proxy or host blocks it, so
+        // it is safe to have on by default.
+        'ai_stream_enabled' => true,
         'ai_cache_enabled' => true,
         'ai_cache_ttl' => 600,
         'ai_context_max_rows' => 15,
@@ -171,6 +175,32 @@ class AiSettingsService
         $saved = $this->savedTimeoutSeconds();
 
         return max($this->minimumRuntimeTimeoutForProvider($this->provider()), $saved);
+    }
+
+    /**
+     * Latency budget for a request a person is waiting on (a Copilot chat turn
+     * or its routing call), as opposed to queued work such as document
+     * extraction or knowledge indexing.
+     *
+     * timeoutSeconds() is floored at two to three minutes because document and
+     * indexing calls genuinely need it; applying that same floor to a chat box
+     * means a user can sit in front of a spinner for minutes before learning
+     * the provider is unreachable. This budget is always the shorter of the two
+     * and never exceeds the configured global timeout, so lowering the global
+     * setting still lowers the interactive one.
+     *
+     * Locally hosted models are slower by nature, so they keep a higher floor
+     * rather than being cut off mid-generation.
+     */
+    public function interactiveTimeoutSeconds(): int
+    {
+        $configured = (int) config('ai.copilot.interactive_timeout_seconds', 45);
+        $floor = $this->provider() === 'ollama' ? 90 : 20;
+
+        return min(
+            $this->timeoutSeconds(),
+            max($floor, min(300, $configured)),
+        );
     }
 
     public function savedConnectTimeoutSeconds(): int
@@ -461,9 +491,41 @@ class AiSettingsService
     }
 
     /** Providers available through the configured embedding adapter. */
+    /**
+     * Delegated to the capability registry so this cannot drift from what
+     * readiness and the settings screen report for the same provider.
+     */
     public function supportsEmbeddings(): bool
     {
-        return in_array($this->embeddingProvider(), ['openai', 'gemini', 'ollama', 'openrouter'], true);
+        return app(AiProviderCapabilityRegistry::class)
+            ->providerSupportsEmbeddings($this->embeddingProvider());
+    }
+
+    /**
+     * Whether the embedding provider accepts many inputs in one request.
+     *
+     * Indexing a knowledge base one HTTP round trip per chunk is the difference
+     * between an index that rebuilds in under a minute and one that takes an
+     * hour and times out on shared hosting. Every provider KiteLedger supports
+     * for embeddings does accept an array, but the capability is stated
+     * explicitly rather than assumed, so adding a provider that does not cannot
+     * silently break indexing.
+     */
+    public function supportsBatchEmbeddings(): bool
+    {
+        return app(AiProviderCapabilityRegistry::class)
+            ->providerSupportsBatchEmbeddings($this->embeddingProvider());
+    }
+
+    /**
+     * Inputs per batched embedding request.
+     *
+     * Kept modest: a very large batch is one request that can fail wholesale,
+     * and providers cap the total tokens per call regardless of the item count.
+     */
+    public function embeddingBatchSize(): int
+    {
+        return max(1, min(96, (int) config('ai.embedding.batch_size', 32)));
     }
 
     public function embeddingModel(): string

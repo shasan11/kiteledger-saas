@@ -1,4 +1,4 @@
-import { Card, Col, Row, Skeleton, Typography, theme } from 'antd';
+import { Skeleton, Typography, theme } from 'antd';
 import {
     CheckCircleOutlined,
     ExclamationCircleOutlined,
@@ -35,82 +35,73 @@ export default function DocumentSummaryCards({ summary, loading = false, onSelec
 
     if (loading && !summary) {
         return (
-            <Row gutter={[12, 12]} style={{ marginBottom: 16 }}>
-                {CARDS.map((card) => (
-                    <Col xs={12} sm={8} lg={4} key={card.key}>
-                        <Card size="small">
-                            <Skeleton active paragraph={false} title={{ width: '60%' }} />
-                        </Card>
-                    </Col>
-                ))}
-            </Row>
+            <div style={{ display: 'flex', gap: 1, padding: 8, marginBottom: 10, background: token.colorBgContainer, border: `1px solid ${token.colorBorderSecondary}` }}>
+                {CARDS.map((card) => <Skeleton.Button key={card.key} active size="small" style={{ width: 110 }} />)}
+            </div>
         );
     }
 
     if (!summary) return null;
 
     return (
-        <Row gutter={[12, 12]} style={{ marginBottom: 16 }}>
+        <div
+            style={{
+                display: 'flex',
+                alignItems: 'stretch',
+                marginBottom: 10,
+                overflowX: 'auto',
+                background: token.colorBgContainer,
+                border: `1px solid ${token.colorBorderSecondary}`,
+            }}
+        >
+            <button
+                type="button"
+                onClick={() => onSelect?.(undefined)}
+                style={{
+                    appearance: 'none', display: 'flex', alignItems: 'center', gap: 7,
+                    padding: '8px 14px', minWidth: 100, border: 0,
+                    borderRight: `1px solid ${token.colorBorderSecondary}`,
+                    borderBottom: !activeStatus ? `2px solid ${token.colorPrimary}` : '2px solid transparent',
+                    background: !activeStatus ? token.colorPrimaryBg : 'transparent',
+                    color: token.colorText, cursor: onSelect ? 'pointer' : 'default',
+                }}
+            >
+                <strong style={{ fontSize: 16, fontVariantNumeric: 'tabular-nums' }}>{Number(summary.total ?? 0)}</strong>
+                <Text type="secondary" style={{ fontSize: 11 }}>All</Text>
+            </button>
             {CARDS.map((card) => {
                 const count = Number(summary[card.key] ?? 0);
                 const isActive = activeStatus === card.key;
 
                 return (
-                    <Col xs={12} sm={8} lg={4} key={card.key}>
-                        <Card
-                            size="small"
-                            hoverable={Boolean(onSelect)}
+                    <button
+                            key={card.key}
+                            type="button"
                             onClick={() => onSelect?.(isActive ? undefined : card.key)}
                             style={{
-                                borderColor: isActive ? token.colorPrimary : undefined,
+                                appearance: 'none',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: 7,
+                                minWidth: 118,
+                                padding: '8px 12px',
+                                border: 0,
+                                borderRight: `1px solid ${token.colorBorderSecondary}`,
+                                borderBottom: isActive ? `2px solid ${token.colorPrimary}` : '2px solid transparent',
+                                background: isActive ? token.colorPrimaryBg : 'transparent',
+                                color: token.colorText,
                                 cursor: onSelect ? 'pointer' : 'default',
+                                textAlign: 'left',
                             }}
-                            styles={{ body: { padding: '10px 12px' } }}
                         >
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                                <span style={{ color: toneColor[card.tone], fontSize: 15 }}>
-                                    {card.icon}
-                                </span>
-                                <div style={{ minWidth: 0 }}>
-                                    {/* Tabular figures so counts do not shift
-                                        the label as they change. */}
-                                    <div
-                                        style={{
-                                            fontSize: 20,
-                                            lineHeight: 1.1,
-                                            fontWeight: 600,
-                                            fontVariantNumeric: 'tabular-nums',
-                                        }}
-                                    >
-                                        {count}
-                                    </div>
-                                    <Text type="secondary" style={{ fontSize: 11 }} ellipsis>
-                                        {card.label}
-                                    </Text>
-                                </div>
-                            </div>
-                        </Card>
-                    </Col>
+                        <span style={{ color: toneColor[card.tone], fontSize: 14 }}>{card.icon}</span>
+                        <span style={{ minWidth: 0 }}>
+                            <strong style={{ display: 'block', fontSize: 14, lineHeight: 1.1, fontVariantNumeric: 'tabular-nums' }}>{count}</strong>
+                            <Text type="secondary" style={{ fontSize: 10, whiteSpace: 'nowrap' }}>{card.label}</Text>
+                        </span>
+                    </button>
                 );
             })}
-
-            <Col xs={12} sm={8} lg={4}>
-                <Card size="small" styles={{ body: { padding: '10px 12px' } }}>
-                    <div
-                        style={{
-                            fontSize: 20,
-                            lineHeight: 1.1,
-                            fontWeight: 600,
-                            fontVariantNumeric: 'tabular-nums',
-                        }}
-                    >
-                        {Number(summary.total ?? 0)}
-                    </div>
-                    <Text type="secondary" style={{ fontSize: 11 }}>
-                        Total
-                    </Text>
-                </Card>
-            </Col>
-        </Row>
+        </div>
     );
 }

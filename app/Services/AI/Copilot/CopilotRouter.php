@@ -189,7 +189,7 @@ final class CopilotRouter
                 confidence: 0.99,
                 requiresLiveData: true,
                 requiresKnowledge: false,
-                candidateTools: ['records.find'],
+                candidateTools: ['records.search'],
                 entities: [$m[0]],
                 filters: ['reference' => $m[0]],
                 missingFields: [],
@@ -197,6 +197,34 @@ final class CopilotRouter
                 decidedBy: 'exact_pattern',
                 sourcePolicy: AnswerSourcePolicy::LiveToolRequired,
             );
+        }
+
+        // Common operational counts have canonical, deterministic handlers.
+        // Resolve them without spending a model call or risking the router
+        // treating every numeric question as finance-only.
+        $operationalCounts = [
+            'pending_leads' => '/(?:\b(?:how many|number of|count(?: of)?|total)\b.{0,40}\bpending leads\b|\bpending leads\b.{0,30}\b(?:count|total)\b)/i',
+            'open_deals' => '/(?:\b(?:how many|number of|count(?: of)?|total)\b.{0,40}\bopen deals\b|\bopen deals\b.{0,30}\b(?:count|total)\b)/i',
+            'active_projects' => '/(?:\b(?:how many|number of|count(?: of)?|total)\b.{0,40}\bactive projects\b|\bactive projects\b.{0,30}\b(?:count|total)\b)/i',
+            'pending_tasks' => '/(?:\b(?:how many|number of|count(?: of)?|total)\b.{0,40}\bpending tasks\b|\bpending tasks\b.{0,30}\b(?:count|total)\b)/i',
+        ];
+
+        foreach ($operationalCounts as $metric => $pattern) {
+            if (preg_match($pattern, $trimmed)) {
+                return new CopilotRoutingDecision(
+                    intent: CopilotIntent::MetricQuery,
+                    confidence: 0.99,
+                    requiresLiveData: true,
+                    requiresKnowledge: false,
+                    candidateTools: ['financial_metrics.query'],
+                    entities: [],
+                    filters: ['metric' => $metric],
+                    missingFields: [],
+                    reason: 'Message asks for a supported operational count.',
+                    decidedBy: 'exact_pattern',
+                    sourcePolicy: AnswerSourcePolicy::LiveToolRequired,
+                );
+            }
         }
 
         // Short greeting with no business content.
@@ -222,7 +250,7 @@ final class CopilotRouter
     /** Layer C — Neuron structured output. */
     private function layerCClassify(CopilotRequest $request): CopilotClassification
     {
-        $agent = new CopilotRouterAgent($request->context, $this->providers->chat());
+        $agent = new CopilotRouterAgent($request->context, $this->providers->chat(interactive: true));
 
         $classification = $agent->structured(
             new UserMessage($request->message),
@@ -307,12 +335,16 @@ final class CopilotRouter
      * Candidate tools are a suggestion for the executor. Actual availability is
      * still filtered by permission, and every tool re-authorizes on execution.
      *
+     * Names must match CopilotToolRegistry keys exactly: CopilotToolScope
+     * intersects this list with the tools it considers relevant, and a name the
+     * registry does not know is silently discarded rather than trusted.
+     *
      * @return string[]
      */
     private function candidateToolsFor(CopilotIntent $intent, CopilotClassification $c): array
     {
         return match ($intent) {
-            CopilotIntent::RecordLookup => ['records.find', 'records.search'],
+            CopilotIntent::RecordLookup => ['records.search'],
             CopilotIntent::ReportNavigation => ['reports.find'],
             CopilotIntent::AppHelp => ['knowledge.search'],
             CopilotIntent::ActionProposal => ['actions.propose'],

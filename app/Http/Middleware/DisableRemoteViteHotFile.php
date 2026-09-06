@@ -13,7 +13,10 @@ class DisableRemoteViteHotFile
     {
         $host = strtolower($request->getHost());
 
-        if (! in_array($host, ['localhost', '127.0.0.1', '::1'], true)) {
+        $isLoopbackHost = in_array($host, ['localhost', '127.0.0.1', '::1'], true)
+            || str_ends_with($host, '.localhost');
+
+        if (! $isLoopbackHost && ! config('app.vite_hot_reload')) {
             app(Vite::class)->useHotFile(storage_path('framework/vite.hot.disabled'));
         }
 

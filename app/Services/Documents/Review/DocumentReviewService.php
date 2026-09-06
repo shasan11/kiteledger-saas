@@ -31,13 +31,8 @@ final class DocumentReviewService
         'party.tax_number',
         'party.email',
         'party.phone',
-        'totals.subtotal',
         'totals.discount_total',
         'totals.tax_total',
-        'totals.shipping',
-        'totals.grand_total',
-        'totals.paid_amount',
-        'totals.balance_due',
     ];
 
     public function __construct(
@@ -62,6 +57,8 @@ final class DocumentReviewService
         $applied = 0;
         $linesApplied = 0;
         $ignored = [];
+        $adjustmentsChanged = false;
+        $taxTotalChanged = false;
 
         foreach ($edits as $key => $value) {
             if (! in_array($key, self::EDITABLE_FIELDS, true) || ! isset($fields[$key])) {
@@ -72,13 +69,18 @@ final class DocumentReviewService
 
             $fields[$key] = $this->applyOne($fields[$key], $value);
             $applied++;
+            $adjustmentsChanged = $adjustmentsChanged
+                || in_array($key, ['totals.discount_total', 'totals.tax_total'], true);
+            $taxTotalChanged = $taxTotalChanged || $key === 'totals.tax_total';
         }
 
-        $structured['fields'] = $fields;
+        $lineArithmeticChanged = false;
+        $lineTaxChanged = false;
 
         if ($lineEdits !== []) {
             $lines = array_values(is_array($structured['lines'] ?? null) ? $structured['lines'] : []);
-            $allowed = ['description', 'product_code', 'product_name', 'quantity', 'unit', 'rate', 'discount', 'tax_rate', 'tax_amount', 'amount', 'product_id', 'account_id'];
+            $allowed = ['description', 'product_code', 'product_name', 'quantity', 'unit', 'rate', 'discount', 'tax_rate', 'tax_amount', 'account_id'];
+            $arithmetic = ['quantity', 'rate', 'discount', 'tax_amount'];
 
             foreach ($lineEdits as $index => $changes) {
                 if (! isset($lines[$index]) || ! is_array($changes)) {
@@ -87,21 +89,45 @@ final class DocumentReviewService
                     continue;
                 }
 
-                foreach (array_intersect_key($changes, array_flip($allowed)) as $key => $value) {
+                $accepted = array_intersect_key($changes, array_flip($allowed));
+                $rejected = array_diff(array_keys($changes), $allowed);
+
+                foreach ($rejected as $key) {
+                    $ignored[] = "lines.{$index}.{$key}";
+                }
+
+                foreach ($accepted as $key => $value) {
                     if (! isset($lines[$index]['original_values'][$key])) {
                         $lines[$index]['original_values'][$key] = $lines[$index][$key] ?? null;
                     }
                     $lines[$index][$key] = is_string($value) ? trim($value) : $value;
                     $linesApplied++;
+                    $lineArithmeticChanged = $lineArithmeticChanged || in_array($key, $arithmetic, true);
+                    $lineTaxChanged = $lineTaxChanged || $key === 'tax_amount';
                 }
 
-                $lines[$index]['edited_by_user'] = true;
-                $lines[$index]['needs_review'] = false;
-                $lines[$index]['amount_origin'] = 'user';
+                if ($accepted !== []) {
+                    $lines[$index]['edited_by_user'] = true;
+                    $lines[$index]['needs_review'] = false;
+                }
+
+                if (array_intersect(array_keys($accepted), $arithmetic) !== []) {
+                    $this->recalculateLineAmount($lines[$index]);
+                }
             }
 
             $structured['lines'] = $lines;
         }
+
+        $fields = $this->recalculateReadOnlyTotals(
+            $fields,
+            array_values(is_array($structured['lines'] ?? null) ? $structured['lines'] : []),
+            $lineArithmeticChanged,
+            $adjustmentsChanged,
+            $lineTaxChanged,
+            $taxTotalChanged,
+        );
+        $structured['fields'] = $fields;
 
         // Corrections can resolve or create problems, so validation re-runs
         // against the corrected values rather than the original extraction.
@@ -173,6 +199,137 @@ final class DocumentReviewService
         $field['needs_review'] = $state->needsReview();
 
         return $field;
+    }
+
+    /** @param array<string, mixed> $line */
+    private function recalculateLineAmount(array &$line): void
+    {
+        $quantity = $this->numeric($line['quantity'] ?? null);
+        $rate = $this->numeric($line['rate'] ?? null);
+
+        if ($quantity === null || $rate === null) {
+            return;
+        }
+
+        if (! isset($line['original_values']['amount'])) {
+            $line['original_values']['amount'] = $line['amount'] ?? null;
+        }
+
+        $line['amount'] = round(
+            ($quantity * $rate)
+            - ($this->numeric($line['discount'] ?? null) ?? 0.0)
+            + ($this->numeric($line['tax_amount'] ?? null) ?? 0.0),
+            2,
+        );
+        $line['amount_origin'] = FieldOrigin::Derived->value;
+    }
+
+    /**
+     * Read-only totals follow the two editable adjustments and line arithmetic.
+     * This keeps the stored payload aligned with what the reviewer sees.
+     *
+     * @param array<string, mixed> $fields
+     * @param array<int, array<string, mixed>> $lines
+     * @return array<string, mixed>
+     */
+    private function recalculateReadOnlyTotals(
+        array $fields,
+        array $lines,
+        bool $lineArithmeticChanged,
+        bool $adjustmentsChanged,
+        bool $lineTaxChanged,
+        bool $taxTotalChanged,
+    ): array {
+        if ($lineArithmeticChanged && isset($fields['totals.subtotal'])) {
+            $subtotal = round(array_sum(array_map(
+                fn (array $line): float => $this->lineSubtotal($line),
+                $lines,
+            )), 2);
+            $fields['totals.subtotal'] = $this->derivedTotal(
+                $fields['totals.subtotal'],
+                $subtotal,
+                'Calculated by adding the line amounts.',
+            );
+        }
+
+        if ($lineTaxChanged && ! $taxTotalChanged && isset($fields['totals.tax_total'])) {
+            $taxTotal = round(array_sum(array_map(
+                fn (array $line): float => $this->numeric($line['tax_amount'] ?? null) ?? 0.0,
+                $lines,
+            )), 2);
+            $fields['totals.tax_total'] = $this->derivedTotal(
+                $fields['totals.tax_total'],
+                $taxTotal,
+                'Calculated by adding the line tax amounts.',
+            );
+        }
+
+        if (! ($lineArithmeticChanged || $adjustmentsChanged) || ! isset($fields['totals.grand_total'])) {
+            return $fields;
+        }
+
+        $grandTotal = round(
+            ($this->numeric($fields['totals.subtotal']['value'] ?? null) ?? 0.0)
+            + ($this->numeric($fields['totals.tax_total']['value'] ?? null) ?? 0.0)
+            - ($this->numeric($fields['totals.discount_total']['value'] ?? null) ?? 0.0)
+            + ($this->numeric($fields['totals.shipping']['value'] ?? null) ?? 0.0),
+            2,
+        );
+        $fields['totals.grand_total'] = $this->derivedTotal(
+            $fields['totals.grand_total'],
+            $grandTotal,
+            'Calculated from subtotal, tax, discount and shipping.',
+        );
+
+        if (isset($fields['totals.balance_due'])) {
+            $balance = round(
+                $grandTotal - ($this->numeric($fields['totals.paid_amount']['value'] ?? null) ?? 0.0),
+                2,
+            );
+            $fields['totals.balance_due'] = $this->derivedTotal(
+                $fields['totals.balance_due'],
+                $balance,
+                'Calculated as total minus amount paid.',
+            );
+        }
+
+        return $fields;
+    }
+
+    /** @param array<string, mixed> $line */
+    private function lineSubtotal(array $line): float
+    {
+        $quantity = $this->numeric($line['quantity'] ?? null);
+        $rate = $this->numeric($line['rate'] ?? null);
+
+        if ($quantity !== null && $rate !== null) {
+            return ($quantity * $rate) - ($this->numeric($line['discount'] ?? null) ?? 0.0);
+        }
+
+        return ($this->numeric($line['amount'] ?? null) ?? 0.0)
+            - ($this->numeric($line['tax_amount'] ?? null) ?? 0.0);
+    }
+
+    /** @param array<string, mixed> $field @return array<string, mixed> */
+    private function derivedTotal(array $field, float $value, string $explanation): array
+    {
+        $field['value'] = $value;
+        $field['origin'] = FieldOrigin::Derived->value;
+        $field['origin_label'] = FieldOrigin::Derived->label();
+        $field['state'] = FieldValidationState::Ok->value;
+        $field['state_label'] = FieldValidationState::Ok->label();
+        $field['tone'] = FieldValidationState::Ok->tone();
+        $field['needs_review'] = false;
+        $field['edited_by_user'] = false;
+        $field['warnings'] = [$explanation];
+        unset($field['conflict_value'], $field['confidence']);
+
+        return $field;
+    }
+
+    private function numeric(mixed $value): ?float
+    {
+        return is_numeric($value) ? (float) $value : null;
     }
 
     private function countIssues(array $fields): int

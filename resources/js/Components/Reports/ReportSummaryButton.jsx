@@ -7,16 +7,19 @@ import ReportSummaryDrawer from './ReportSummaryDrawer.jsx';
 const BACKEND_BASE = import.meta.env.VITE_APP_BACKEND_URL || '';
 const api = (path) => `${BACKEND_BASE}${path}`;
 
+/*
+ * The summary request carries only *what* to summarize — the report and its
+ * filters. It deliberately does not send rows, totals or summary cards: the
+ * server re-runs the report through the same engine that produced the table on
+ * screen, so the AI's figures cannot be influenced by anything the browser
+ * says. `rows` is still accepted as a prop purely to render the row count in
+ * the drawer while the request is in flight.
+ */
 export default function ReportSummaryButton({
   category,
   reportKey,
   reportTitle,
   filters = {},
-  columns = [],
-  rows = [],
-  totals = {},
-  summaryCards = [],
-  metadata = {},
   disabled = false,
 }) {
   const [open, setOpen] = useState(false);
@@ -32,20 +35,7 @@ export default function ReportSummaryButton({
     try {
       const response = await axios.post(
         api(`/api/reports/${category}/${reportKey}/ai-summary`),
-        {
-          filters,
-          columns: columns.slice(0, 30).map((column) => ({
-            key: column.key,
-            title: String(column.title || column.key || ''),
-          })),
-          rows: rows.slice(0, 100),
-          totals,
-          summary_cards: summaryCards,
-          metadata: {
-            ...metadata,
-            row_count: rows.length,
-          },
-        },
+        { filters },
       );
 
       setData(response.data?.data || null);

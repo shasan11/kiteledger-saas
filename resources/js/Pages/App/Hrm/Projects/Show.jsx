@@ -859,52 +859,6 @@ export default function ProjectShow({auth,id}) {
     marginBottom:    token.marginXS,
   };
 
-  /* ══ OVERVIEW TAB ════════════════════════════════════════════════ */
-  const overviewHighlights = [
-    {label:'Progress', value:`${progressPercent}%`, tone:'default', icon:<CheckCircleOutlined />},
-    {label:'Tasks', value:`${completedTasks.length}/${tasks.length}`, tone:'success', icon:<UnorderedListOutlined />},
-    {label:'Deadline', value:deadlineSummary.label, tone:deadlineSummary.tone, icon:<CalendarOutlined />},
-    {label:'Profit / Loss', value:(Number(financialSummary?.profit_loss||0)).toLocaleString('en-NP'), tone:Number(financialSummary?.profit_loss||0) < 0 ? 'danger' : 'success', icon:<MoneyCollectOutlined />},
-  ];
-
-  const overviewTab = (
-    <Space direction="vertical" size={token.margin} style={{width:'100%'}}>
-      <Row gutter={[token.marginSM,token.marginSM]}>
-        {overviewHighlights.map(item=>(
-          <Col xs={24} sm={12} lg={6} key={item.label}>
-            <SummaryTile label={item.label} value={item.value} icon={item.icon} tone={item.tone}/>
-          </Col>
-        ))}
-      </Row>
-
-      <Row gutter={[token.margin,token.margin]} align="stretch">
-        <Col xs={24} lg={12}>
-          <Card title="Project Progress" bordered={false} style={{height:'100%'}} styles={{body:{height:300,padding:token.padding},header:{fontWeight:700}}}>
-            <ProgressRadial percent={progressPercent} health={projectHealth}/>
-          </Card>
-        </Col>
-        <Col xs={24} lg={12}>
-          <Card title="Tasks by Status" bordered={false} style={{height:'100%'}} styles={{body:{height:300,padding:token.padding},header:{fontWeight:700}}}>
-            <TaskStatusPie taskStatuses={taskStatuses} tasks={tasks}/>
-          </Card>
-        </Col>
-      </Row>
-
-      <Row gutter={[token.margin,token.margin]} align="stretch">
-        <Col xs={24} lg={12}>
-          <Card title="Milestone Progress" bordered={false} style={{height:'100%'}} styles={{body:{height:300,padding:token.padding},header:{fontWeight:700}}}>
-            <MilestoneBar milestones={milestones} tasks={tasks}/>
-          </Card>
-        </Col>
-        <Col xs={24} lg={12}>
-          <Card title="Team Workload" bordered={false} style={{height:'100%'}} styles={{body:{height:300,padding:token.padding},header:{fontWeight:700}}}>
-            <WorkloadBar workload={workload}/>
-          </Card>
-        </Col>
-      </Row>
-    </Space>
-  );
-
   /* ══ BOARD TAB ═══════════════════════════════════════════════════ */
   const boardTab = (
     <Space direction="vertical" size={token.margin} style={{width:'100%'}}>
@@ -1163,9 +1117,6 @@ export default function ProjectShow({auth,id}) {
                 <Link href={route('hrm.projects.index')}>
                   <Button icon={<ArrowLeftOutlined />}>Back</Button>
                 </Link>
-                <span style={{width:44,height:44,borderRadius:token.borderRadiusLG,display:'inline-flex',alignItems:'center',justifyContent:'center',background:token.colorPrimaryBg,color:token.colorPrimary,fontSize:20}}>
-                  <ProjectOutlined />
-                </span>
                 <div>
                   <Space size={token.marginXS} wrap>
                     <Title level={4} style={{margin:0,lineHeight:1.2}} ellipsis={{tooltip:project.name}}>{project.name}</Title>
@@ -1174,7 +1125,7 @@ export default function ProjectShow({auth,id}) {
                     <Space size={6} split={<span style={{opacity:.35}}>|</span>}>
                       <Text type="secondary">{getUserLabel(project.project_manager||project.projectManager)}</Text>
                       {project.branch?.name&&<Text type="secondary">{project.branch.name}</Text>}
-                      <Text type="secondary"><CalendarOutlined style={{marginRight:4}}/>{formatDate(project.start_date)} - {formatDate(project.end_date)}</Text>
+                      <Text type="secondary">{formatDate(project.start_date)} - {formatDate(project.end_date)}</Text>
                     </Space>
                   </div>
                 </div>
@@ -1199,8 +1150,8 @@ export default function ProjectShow({auth,id}) {
           )}
 
           <div style={{...cardStyle, padding:`${token.paddingSM}px ${token.padding}px`}}>
-            <Tabs className="ps-tab" defaultActiveKey="overview" items={[
-              {key:'overview',   label:'Overview',   children:overviewTab},
+            <Tabs className="ps-tab" defaultActiveKey="details" items={[
+              {key:'details',    label:'Details',    children:detailsTab},
               {key:'board',      label:'Board',       children:boardTab},
               {key:'milestones', label:'Milestones',  children:milestoneTab},
               {key:'team',       label:'Team',         children:teamTab},
@@ -1222,7 +1173,6 @@ export default function ProjectShow({auth,id}) {
                 </Card>
               )},
               {key:'status',  label:'Statuses', children:statusTab},
-              {key:'details', label:'Details',  children:detailsTab},
             ]}/>
           </div>
         </>

@@ -2013,9 +2013,9 @@ class DashboardService
             ->when($this->hasColumn('payroll_payments', 'status'), function (Builder $query) {
                 $query->whereNotIn('status', ['cancelled', 'failed', 'void', 'voided', 'CANCELLED', 'FAILED', 'VOID', 'VOIDED']);
             })
-            ->when(! empty($filters['branch_id']) && $this->hasColumn('payroll_payments', 'payroll_run_id') && $this->tableExists('payroll_runs') && $this->hasColumn('payroll_runs', 'branch_id'), function (Builder $query) use ($filters) {
-                $query->join('payroll_runs', 'payroll_payments.payroll_run_id', '=', 'payroll_runs.id')
-                    ->where('payroll_runs.branch_id', $filters['branch_id']);
+            ->when(! empty($filters['branch_id']) && $this->hasColumn('payroll_payments', 'payroll_run_id') && $this->tableExists('payrolls') && $this->hasColumn('payrolls', 'branch_id'), function (Builder $query) use ($filters) {
+                $query->join('payrolls', 'payroll_payments.payroll_run_id', '=', 'payrolls.id')
+                    ->where('payrolls.branch_id', $filters['branch_id']);
             })
             ->sum('payroll_payments.amount');
 

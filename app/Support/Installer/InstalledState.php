@@ -124,32 +124,6 @@ class InstalledState
             && self::hasRequiredRuntimeFiles();
     }
 
-    /** @return array<int, string> */
-    public static function recoveryProblems(): array
-    {
-        $problems = [];
-        if (self::requiresRecovery()) {
-            $problems[] = 'The previous lock was found with an incomplete environment and requires installer recovery.';
-        }
-        if (! is_file(base_path('.env'))) {
-            $problems[] = '.env is missing.';
-        }
-        if (! self::hasValidAppKey()) {
-            $problems[] = 'APP_KEY is missing or stale.';
-        }
-        if (! self::hasUsableDatabaseConfig()) {
-            $problems[] = 'Database configuration is missing, invalid, or still using Laravel defaults.';
-        }
-        if (! is_file(base_path('vendor/autoload.php'))) {
-            $problems[] = 'Vendor dependencies are missing.';
-        }
-        if (! is_file(public_path('build/manifest.json'))) {
-            $problems[] = 'Frontend build assets are missing.';
-        }
-
-        return $problems;
-    }
-
     public static function mark(): void
     {
         $contents = 'installed_at='.date('c').PHP_EOL;

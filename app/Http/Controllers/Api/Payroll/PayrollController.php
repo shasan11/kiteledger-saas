@@ -114,7 +114,7 @@ class PayrollController extends BaseCrudApiController
             'branch_id' => ['nullable', 'uuid', 'exists:branches,id'],
             'currency_id' => ['nullable', 'uuid', 'exists:currencies,id'],
             'exchange_rate' => ['nullable', 'numeric', 'gt:0'],
-            'source_account_id' => ['required', 'uuid', 'exists:accounts,id'],
+            'source_account_id' => ['nullable', 'uuid', 'exists:accounts,id'],
             'payment_reference' => ['nullable', 'string', 'max:120'],
             'employee_scope' => ['nullable', 'in:all,branch,department,selected'],
             'department_id' => ['nullable', 'uuid', 'exists:departments,id'],
@@ -131,7 +131,7 @@ class PayrollController extends BaseCrudApiController
         $data['branch_id'] = $branchId;
         $data['currency_id'] = $this->resolveCurrencyId($data, $branchId);
         $data['exchange_rate'] = $this->resolveExchangeRate($data['currency_id'], $data['exchange_rate'] ?? null);
-        $data['strict'] = $request->boolean('strict', false);
+        $data['strict'] = $request->boolean('strict', true);
 
         $employeeIds = $this->resolveEmployeeIds($data);
 
@@ -230,6 +230,8 @@ class PayrollController extends BaseCrudApiController
 
         $data = $request->validate([
             'source_account_id' => ['nullable', 'uuid', 'exists:accounts,id'],
+            'payment_reference' => ['nullable', 'string', 'max:120'],
+            'payment_date' => ['nullable', 'date'],
         ]);
 
         $payroll = Payroll::query()->findOrFail($id);
@@ -238,6 +240,10 @@ class PayrollController extends BaseCrudApiController
             $payroll->forceFill([
                 'source_account_id' => $data['source_account_id'],
             ])->save();
+        }
+
+        if (! empty($data['payment_reference'])) {
+            $payroll->payslips()->update(['payment_reference' => $data['payment_reference']]);
         }
 
         $payroll->load($this->relations);
@@ -253,13 +259,13 @@ class PayrollController extends BaseCrudApiController
             $payroll,
             'paid',
             'pay',
-            $request->user()
+            $request->user(),
+            null,
+            [
+                'payment_reference' => $data['payment_reference'] ?? null,
+                'payment_date' => $data['payment_date'] ?? now()->toDateString(),
+            ],
         );
-
-        if (! empty($data['payment_reference'])) {
-            $paid->payslips()->update(['payment_reference' => $data['payment_reference']]);
-            $paid->refresh();
-        }
 
         return response()->json($this->withBusinessRules($paid, $businessRules));
     }
@@ -393,7 +399,7 @@ class PayrollController extends BaseCrudApiController
 
         abort_unless(in_array($kind, ['addition', 'deduction'], true), 404);
 
-        $data = $this->validateAdjustment($request);
+        $data = $this->validateAdjustment($request, $kind);
 
         return response()->json($service->addPayrollAdjustment(
             Payroll::query()->findOrFail($id),
@@ -509,10 +515,10 @@ class PayrollController extends BaseCrudApiController
         return (float) ($currency?->exchange_rate ?: 1);
     }
 
-    protected function validateAdjustment(Request $request): array
+    protected function validateAdjustment(Request $request, string $kind): array
     {
         return $request->validate([
-            'component_id' => ['nullable', 'uuid', 'exists:salary_components,id'],
+            'component_id' => [$kind === 'deduction' ? 'required' : 'nullable', 'uuid', 'exists:salary_components,id'],
             'name' => ['required', 'string', 'max:190'],
             'amount' => ['required', 'numeric', 'gt:0'],
             'calculation_type' => ['required', 'in:fixed,percentage'],

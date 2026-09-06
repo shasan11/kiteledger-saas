@@ -27,6 +27,7 @@ use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
+use Inertia\Testing\AssertableInertia as Assert;
 use Tests\TestCase;
 
 class SuperadminControlCenterTest extends TestCase
@@ -171,6 +172,22 @@ class SuperadminControlCenterTest extends TestCase
         $this->assertSame(120, (int) PlatformSetting::where('key', 'security.session_lifetime')->first()->value);
         $this->actingAs($admin, 'central')->put($url, ['values' => ['security.session_lifetime' => 60], 'confirmation_password' => 'correct-password'])->assertRedirect();
         $this->assertSame(60, (int) PlatformSetting::where('key', 'security.session_lifetime')->first()->value);
+    }
+
+    public function test_general_settings_hide_legacy_duplicate_platform_name_field(): void
+    {
+        $admin = CentralAdmin::create(['name' => 'Owner', 'email' => 'owner-general-settings@example.test', 'password' => bcrypt('correct-password'), 'role' => 'super_admin', 'is_active' => true]);
+        PlatformSetting::create(['group' => 'general', 'key' => 'general.platform_name', 'label' => 'Platform name', 'type' => 'string', 'input_type' => 'text', 'value' => 'KiteLedger SaaS', 'sort_order' => 0]);
+        PlatformSetting::create(['group' => 'general', 'key' => 'platform.name', 'label' => 'Platform name', 'type' => 'string', 'input_type' => 'text', 'value' => 'Legacy KiteLedger', 'sort_order' => 0]);
+
+        $this->actingAs($admin, 'central')
+            ->get(route('central.settings.index', ['group' => 'general']))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('activeGroup', 'general')
+                ->where('groups.general.0.key', 'general.platform_name')
+                ->missing('groups.general.1')
+            );
     }
 
     public function test_feature_override_workflow_exposes_effective_value_and_resets_to_plan(): void

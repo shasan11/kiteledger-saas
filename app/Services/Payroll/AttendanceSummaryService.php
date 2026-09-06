@@ -4,6 +4,7 @@ namespace App\Services\Payroll;
 
 use App\Models\Attendance;
 use App\Models\AttendanceSummary;
+use App\Models\HrmConfiguration;
 use App\Models\LeaveApplication;
 use App\Models\PayrollPeriod;
 use App\Models\PayrollSetting;
@@ -27,8 +28,9 @@ class AttendanceSummaryService
         $dates = collect(iterator_to_array(CarbonPeriod::create($start, $end)));
         $calendarDays = $dates->count();
         $warnings = [];
+        $hrm = HrmConfiguration::query()->where('active', true)->first();
 
-        $shiftHours = (float) ($employee->shift?->work_hour ?: 8);
+        $shiftHours = (float) ($employee->shift?->work_hour ?: $hrm?->default_working_hours_per_day ?: 8);
         if ($shiftHours <= 0) {
             $shiftHours = 8;
             $warnings[] = 'Employee has no valid shift. Default 8 working hours was used.';
@@ -44,6 +46,9 @@ class AttendanceSummaryService
         $attendanceByDate = $this->attendanceByDate($employee, $start, $end);
         $leaveByDate = $this->leaveByDate($employee, $start, $end);
         $hasAttendanceInputs = ! empty($attendanceByDate) || ! empty($leaveByDate);
+        $halfDayThreshold = (float) ($hrm?->half_day_threshold_hours ?: ($shiftHours / 2));
+        $graceMinutes = max(0, (int) ($hrm?->attendance_grace_period_minutes ?: 0));
+        $missingDates = [];
 
         $presentDays = 0.0;
         $halfDays = 0.0;
@@ -56,23 +61,21 @@ class AttendanceSummaryService
 
         foreach ($workingDates as $date) {
             $key = $date->toDateString();
-            $attendanceHours = (float) ($attendanceByDate[$key] ?? 0);
+            $attendance = $attendanceByDate[$key] ?? null;
+            $attendanceHours = (float) ($attendance['hours'] ?? 0);
             $leave = $leaveByDate[$key] ?? null;
-
-            if (! $hasAttendanceInputs) {
-                $presentDays += 1;
-                $workingHours += $shiftHours;
-                continue;
-            }
 
             if ($attendanceHours > 0) {
                 $workingHours += $attendanceHours;
-                $dayValue = $attendanceHours >= ($shiftHours / 2) ? 1.0 : 0.5;
+                $dayValue = $attendanceHours >= $halfDayThreshold ? 1.0 : 0.5;
                 $presentDays += $dayValue;
                 if ($dayValue < 1) {
                     $halfDays += 1;
                 }
                 $overtimeHours += max(0, $attendanceHours - $shiftHours);
+                if (($attendance['late'] ?? false) || $this->isLate($attendance['first_in'] ?? null, $employee->shift?->start_time, $graceMinutes)) {
+                    $lateDays++;
+                }
                 continue;
             }
 
@@ -87,6 +90,22 @@ class AttendanceSummaryService
 
             $absentDays += 1;
             $unpaidLeaveDays += 1;
+            $missingDates[] = $key;
+        }
+
+        foreach ($holidayDates as $holidayDate) {
+            $holidayAttendance = $attendanceByDate[$holidayDate] ?? null;
+            if ($holidayAttendance) {
+                $hours = (float) ($holidayAttendance['hours'] ?? 0);
+                $workingHours += $hours;
+                $overtimeHours += $hours;
+            }
+        }
+
+        if (! $hasAttendanceInputs) {
+            $warnings[] = 'No attendance or approved leave records were found. Salary was not guessed; the employee must be reviewed.';
+        } elseif ($missingDates) {
+            $warnings[] = count($missingDates).' working day(s) have neither attendance nor approved leave and were treated as unpaid absence.';
         }
 
         if ($workingDates->isEmpty()) {
@@ -129,6 +148,8 @@ class AttendanceSummaryService
             'shift_hours' => $shiftHours,
             'monthly_work_hour' => round($monthlyWorkHour, 2),
             'working_hour' => round($workingHours, 2),
+            'attendance_complete' => $hasAttendanceInputs && empty($missingDates),
+            'missing_working_dates' => $missingDates,
         ];
     }
 
@@ -169,8 +190,24 @@ class AttendanceSummaryService
             ->whereBetween('in_time', [$start->startOfDay(), $end->endOfDay()])
             ->get()
             ->groupBy(fn (Attendance $attendance) => $attendance->in_time?->toDateString())
-            ->map(fn ($items) => round($items->sum(fn (Attendance $attendance) => (float) ($attendance->total_hour ?: $this->hoursBetween($attendance))), 2))
+            ->map(fn ($items) => [
+                'hours' => round($items->sum(fn (Attendance $attendance) => (float) ($attendance->total_hour ?: $this->hoursBetween($attendance))), 2),
+                'late' => $items->contains(fn (Attendance $attendance) => str_contains(strtolower((string) $attendance->in_time_status), 'late')),
+                'first_in' => $items->min(fn (Attendance $attendance) => $attendance->in_time?->toIso8601String()),
+            ])
             ->all();
+    }
+
+    private function isLate(?string $firstIn, mixed $shiftStart, int $graceMinutes): bool
+    {
+        if (! $firstIn || ! $shiftStart) {
+            return false;
+        }
+
+        $actual = CarbonImmutable::parse($firstIn);
+        $scheduled = CarbonImmutable::parse($actual->toDateString().' '.(string) $shiftStart)->addMinutes($graceMinutes);
+
+        return $actual->greaterThan($scheduled);
     }
 
     private function leaveByDate(User $employee, CarbonImmutable $start, CarbonImmutable $end): array

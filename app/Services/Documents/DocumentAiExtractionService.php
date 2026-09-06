@@ -5,11 +5,17 @@ namespace App\Services\Documents;
 use App\Models\DocumentExtraction;
 use App\Models\DocumentUpload;
 use App\Services\Documents\Contracts\DocumentExtractionResult;
+use App\Services\Documents\Pipeline\ChunkResultMerger;
+use App\Services\Documents\Pipeline\DocumentChunk;
+use App\Services\Documents\Pipeline\DocumentChunkPlanner;
 use App\Services\Documents\Pipeline\DocumentErrorCode;
 use App\Services\Documents\Pipeline\DocumentPageAnalysis;
 use App\Services\Documents\Pipeline\DocumentPageService;
 use App\Services\Documents\Pipeline\DocumentProcessingStage;
+use App\Services\Documents\Pipeline\StructuredOutputResult;
 use App\Services\Documents\Pipeline\StructuredOutputValidator;
+use App\Services\Documents\Schema\DocumentTypeClassifier;
+use App\Services\Documents\Schema\DocumentTypePrompt;
 use Illuminate\Support\Facades\Log;
 use RuntimeException;
 use ZipArchive;
@@ -25,7 +31,28 @@ class DocumentAiExtractionService
         protected DocumentExtractionNormalizerV2 $normalizerV2,
         protected StructuredOutputValidator $structuredOutput,
         protected DocumentPageService $pages,
+        protected DocumentChunkPlanner $chunkPlanner,
+        protected ChunkResultMerger $chunkMerger,
+        protected DocumentTypeClassifier $classifier,
+        protected DocumentTypePrompt $typePrompt,
     ) {}
+
+    /**
+     * Stage one of extraction: narrow the schema to the document's own type.
+     *
+     * Classification is deterministic and runs on the text we already have, so
+     * it costs nothing. When it cannot decide, the generic schema is used and
+     * behaviour is unchanged — a confident wrong guess would be far worse than
+     * asking for every section.
+     */
+    private function promptForText(string $text): string
+    {
+        $type = $this->classifier->classify($text);
+
+        return $type !== null
+            ? $this->typePrompt->build($type)
+            : DocumentExtractionPrompt::user();
+    }
 
     /**
      * Records the current pipeline position so the UI can show a truthful
@@ -92,26 +119,38 @@ class DocumentAiExtractionService
 
             $this->stage($extraction, DocumentProcessingStage::Reading);
 
-            $result = $this->ai->extract(
-                $prepared['base64'],
-                $prepared['mime'],
-                DocumentExtractionPrompt::system(),
-                $prepared['user_prompt'],
-            );
+            /** @var DocumentChunk[] $chunks */
+            $chunks = $prepared['chunks'] ?? [];
 
-            $this->stage($extraction, DocumentProcessingStage::Extracting);
-
-            // Malformed output is never accepted quietly: one deterministic
-            // repair pass, then an explicit, user-facing failure.
-            $structured = $this->structuredOutput->validate((string) ($result['text'] ?? ''));
-
-            if (! $structured->ok) {
-                throw new RuntimeException(
-                    ($structured->errorCode ?? DocumentErrorCode::ExtractionInvalid)->message()
+            if (count($chunks) > 1) {
+                // A long document is read in page groups and merged
+                // deterministically. Truncating it at a character limit
+                // produced a scan that looked complete while silently omitting
+                // most of the pages.
+                [$json, $structured, $result, $coverage] = $this->extractInChunks($extraction, $prepared, $chunks);
+            } else {
+                $result = $this->ai->extract(
+                    $prepared['base64'],
+                    $prepared['mime'],
+                    DocumentExtractionPrompt::system(),
+                    $prepared['user_prompt'],
                 );
-            }
 
-            $json = $structured->data;
+                $this->stage($extraction, DocumentProcessingStage::Extracting);
+
+                // Malformed output is never accepted quietly: one deterministic
+                // repair pass, then an explicit, user-facing failure.
+                $structured = $this->structuredOutput->validate((string) ($result['text'] ?? ''));
+
+                if (! $structured->ok) {
+                    throw new RuntimeException(
+                        ($structured->errorCode ?? DocumentErrorCode::ExtractionInvalid)->message()
+                    );
+                }
+
+                $json = $structured->data;
+                $coverage = null;
+            }
 
             $this->stage($extraction, DocumentProcessingStage::Normalizing);
 
@@ -130,8 +169,21 @@ class DocumentAiExtractionService
                 $normalized['warnings'] ?? [],
                 $structured->warnings(),
                 $analysis?->warnings() ?? [],
+                $coverage['warnings'] ?? [],
             )));
             $normalized['warnings'] = $warnings;
+
+            $structuredPayload = $v2->toArray(includeDebug: true);
+
+            // Coverage travels with the structured payload so the review screen
+            // can state which pages were read rather than implying all of them.
+            if ($coverage !== null) {
+                $structuredPayload['coverage'] = $coverage['coverage'];
+            }
+
+            if ($analysis !== null) {
+                $structuredPayload['pages'] = $analysis->pageMap();
+            }
 
             $extraction->update([
                 'status' => 'completed',
@@ -143,11 +195,13 @@ class DocumentAiExtractionService
                 'raw_text' => $result['text'] ?? null,
                 'extracted_json' => $json,
                 'normalized_json' => $normalized,
-                'structured_json' => $v2->toArray(includeDebug: true),
+                'structured_json' => $structuredPayload,
                 'schema_version' => DocumentExtractionResult::SCHEMA_VERSION,
                 'confidence_score' => $normalized['confidence'] ?? null,
                 'review_issue_count' => $v2->reviewIssueCount(),
-                'partial' => $structured->partial || (bool) $analysis?->truncated,
+                'partial' => $structured->partial
+                    || (bool) $analysis?->truncated
+                    || ($coverage !== null && ! ($coverage['coverage']['complete'] ?? true)),
                 'duration_ms' => (int) round((microtime(true) - $startedAt) * 1000),
                 'completed_at' => now(),
             ]);
@@ -190,6 +244,97 @@ class DocumentAiExtractionService
         }
     }
 
+    /**
+     * Extracts a long document in page groups and merges the results.
+     *
+     * Each chunk is a separate model request. A chunk that fails does not fail
+     * the document: its pages are recorded as unread and the reviewer is told,
+     * because a partial statement the user knows is partial is far more useful
+     * than one silently missing three weeks of transactions.
+     *
+     * @param  DocumentChunk[]  $chunks
+     * @return array{0: array<string, mixed>, 1: StructuredOutputResult, 2: array<string, mixed>, 3: array<string, mixed>}
+     */
+    private function extractInChunks(DocumentExtraction $extraction, array $prepared, array $chunks): array
+    {
+        $results = [];
+        $lastResult = [];
+
+        foreach ($chunks as $position => $chunk) {
+            // The stage is re-stamped per section so a long document does not
+            // sit on one status for minutes. Section-level detail would need a
+            // new column; the stage plus the final coverage report is enough to
+            // keep the user honestly informed.
+            $this->stage($extraction, DocumentProcessingStage::Extracting);
+
+            try {
+                $response = $this->ai->extract(
+                    base64_encode($this->sanitizeDocumentText($chunk->text)),
+                    'text/plain',
+                    DocumentExtractionPrompt::system(),
+                    $prepared['user_prompt']
+                        ."\n\nThis is section ".($position + 1).' of '.count($chunks)
+                        .' of a longer document, covering '.$chunk->label()
+                        .'. Extract only what appears in this section. Do not guess at values from other sections.',
+                );
+
+                $lastResult = $response;
+                $validated = $this->structuredOutput->validate((string) ($response['text'] ?? ''));
+
+                $results[] = [
+                    'chunk' => $chunk,
+                    'data' => $validated->ok ? $validated->data : null,
+                    'error' => $validated->ok ? null : 'invalid_output',
+                ];
+            } catch (\Throwable $e) {
+                // One failed section must not lose the sections that worked.
+                Log::warning('Document chunk extraction failed', [
+                    'document_extraction_id' => $extraction->id,
+                    'chunk' => $chunk->label(),
+                    'error' => mb_substr($e->getMessage(), 0, 200),
+                ]);
+
+                $results[] = ['chunk' => $chunk, 'data' => null, 'error' => 'request_failed'];
+            }
+        }
+
+        $pagesPlanned = [];
+
+        foreach ($chunks as $chunk) {
+            $pagesPlanned = array_merge($pagesPlanned, $chunk->pageNumbers);
+        }
+
+        $merged = $this->chunkMerger->merge($results, $pagesPlanned);
+
+        // Every section failing is a failed scan, not a completed one with an
+        // empty result.
+        if ($merged->pagesProcessed === []) {
+            throw new RuntimeException(DocumentErrorCode::ExtractionInvalid->message());
+        }
+
+        $structured = $this->structuredOutput->validate(json_encode($merged->data, JSON_UNESCAPED_SLASHES) ?: '');
+
+        if (! $structured->ok) {
+            throw new RuntimeException(
+                ($structured->errorCode ?? DocumentErrorCode::ExtractionInvalid)->message()
+            );
+        }
+
+        $warnings = $merged->warnings;
+
+        if ($merged->pagesFailed !== []) {
+            $warnings[] = 'Pages '.implode(', ', $merged->pagesFailed)
+                .' could not be read. The details from those pages are missing from this extraction.';
+        }
+
+        return [
+            $structured->data,
+            $structured,
+            $lastResult,
+            ['coverage' => $merged->coverage(), 'warnings' => $warnings],
+        ];
+    }
+
     private function prepareDocumentForAi(DocumentUpload $doc): array
     {
         $base64 = $this->storage->readBase64($doc);
@@ -212,6 +357,8 @@ class DocumentAiExtractionService
                 throw new RuntimeException(DocumentErrorCode::PasswordProtected->message());
             }
 
+            $budget = (int) config('documents.max_plain_text_chars', 60000);
+
             /*
              * A digitally generated PDF already contains its own text. Reading
              * that directly is exact and cheap; sending the same page through
@@ -219,17 +366,38 @@ class DocumentAiExtractionService
              * and cost. Scans have no text layer and still go to vision.
              */
             if ($analysis->canUseNativeText()) {
-                $text = $analysis->toPromptText(
-                    (int) config('documents.max_plain_text_chars', 60000),
-                );
+                $text = $analysis->toPromptText($budget);
+                $chunks = $this->chunkPlanner->plan($analysis->pages, $budget);
 
                 return [
                     'base64' => base64_encode($this->sanitizeDocumentText($text)),
                     'mime' => 'text/plain',
-                    'user_prompt' => DocumentExtractionPrompt::user()
+                    'user_prompt' => $this->promptForText($text)
                         ."\n\nThe document's own text layer is provided below, split by page. "
                         .'Cite the page number a value came from where you can.',
                     'analysis' => $analysis,
+                    'chunks' => $chunks,
+                ];
+            }
+
+            /*
+             * A mixed PDF — some digitally generated pages, some scans — used to
+             * pass the document-wide text check and be treated as fully
+             * digital, which dropped every scanned page's contents without a
+             * warning. Both sources are now sent: the file itself so vision can
+             * read the scans, and the text layer so the digital pages are read
+             * exactly rather than re-transcribed.
+             */
+            if ($analysis->isMixed()) {
+                return [
+                    'base64' => $base64,
+                    'mime' => 'application/pdf',
+                    'user_prompt' => DocumentExtractionPrompt::user()
+                        ."\n\nSome pages of this document are digitally generated and some are scans. "
+                        ."The text layer of the digital pages is reproduced below; read the remaining pages from the attached document.\n\n"
+                        .$this->sanitizeDocumentText($analysis->toPromptText($budget)),
+                    'analysis' => $analysis,
+                    'chunks' => [],
                 ];
             }
 
@@ -238,6 +406,7 @@ class DocumentAiExtractionService
                 'mime' => 'application/pdf',
                 'user_prompt' => DocumentExtractionPrompt::user(),
                 'analysis' => $analysis,
+                'chunks' => [],
             ];
         }
 
@@ -257,7 +426,7 @@ class DocumentAiExtractionService
             return [
                 'base64' => base64_encode($text),
                 'mime' => 'text/plain',
-                'user_prompt' => DocumentExtractionPrompt::user()
+                'user_prompt' => $this->promptForText($text)
                     ."\n\nThe uploaded Word document was converted to plain text before extraction. Extract the accounting/document data from the text content.",
             ];
         }

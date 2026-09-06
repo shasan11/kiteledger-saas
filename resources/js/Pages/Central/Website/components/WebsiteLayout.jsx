@@ -3,17 +3,38 @@ import WebsiteFooter from './WebsiteFooter';
 import WebsiteHeader from './WebsiteHeader';
 import { WebsiteImage, WebsiteLink } from './WebsitePrimitives';
 
+function noticeStorageKey(item) {
+    const version = item?.updated_at || item?.content || 'current';
+    return `kl-announcement-${item?.id}-${btoa(unescape(encodeURIComponent(String(version)))).slice(0, 16)}`;
+}
+
+function storedNoticeDismissal(item) {
+    try {
+        return window.localStorage.getItem(noticeStorageKey(item)) === '1';
+    } catch {
+        return false;
+    }
+}
+
+function storeNoticeDismissal(item) {
+    try {
+        window.localStorage.setItem(noticeStorageKey(item), '1');
+    } catch {
+        return;
+    }
+}
+
 function Announcement({ item }) {
-    const [hidden, setHidden] = useState(true);
+    const [hidden, setHidden] = useState(false);
     useEffect(() => {
-        if (item) setHidden(window.localStorage.getItem(`kl-announcement-${item.id}`) === '1');
-    }, [item?.id]);
+        if (item) setHidden(storedNoticeDismissal(item));
+    }, [item?.id, item?.updated_at, item?.content]);
     if (!item || hidden || !item.content) return null;
     const data = item.data || {};
     const url = item.link_url || data.url;
     const dismissible = item.is_dismissible ?? data.dismissible ?? true;
     const dismiss = () => {
-        window.localStorage.setItem(`kl-announcement-${item.id}`, '1');
+        storeNoticeDismissal(item);
         setHidden(true);
     };
     return <aside className="kl-announcement" aria-label="Announcement">
@@ -21,6 +42,12 @@ function Announcement({ item }) {
         {url && <WebsiteLink href={url} newTab={item.target === 'new_tab' || data.new_tab}>{item.link_label || data.link_label || 'Learn more'}</WebsiteLink>}
         {dismissible && <button type="button" onClick={dismiss} aria-label="Dismiss announcement">×</button>}
     </aside>;
+}
+
+function AnnouncementStack({ items = [], fallback = [] }) {
+    const notices = items.length ? items : fallback.slice(0, 1);
+    if (!notices.length) return null;
+    return <>{notices.map((item) => <Announcement key={item.id || item.content} item={item}/>)}</>;
 }
 
 function Popup({ item }) {
@@ -90,7 +117,7 @@ export default function WebsiteLayout({ children, menus = {}, site = {}, announc
     return <div className="kl-site" data-density={density} data-scale={scale} data-corners={corners} data-cards={cards} data-buttons={buttons} style={theme}>
         <a className="kl-skip-link" href="#main-content">Skip to main content</a>
         {previewMessage && <div className="kl-preview" role="status">{previewMessage}</div>}
-        <Announcement item={navbarNotifications[0] || announcements[0]}/>
+        <AnnouncementStack items={navbarNotifications} fallback={announcements}/>
         <WebsiteHeader menus={menus} site={site}/>
         <main id="main-content">{children}</main>
         <WebsiteFooter menus={menus} site={site} socialLinks={socialLinks}/>

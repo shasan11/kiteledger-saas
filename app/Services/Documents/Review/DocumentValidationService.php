@@ -47,8 +47,225 @@ final class DocumentValidationService
         $fields = $this->validateTotals($fields, $structured['lines'] ?? []);
 
         $structured['fields'] = $fields;
+        $structured['issues'] = $this->issues($fields, $structured);
 
         return $structured;
+    }
+
+    /**
+     * Coded issues for the review screen, computed from the validated fields
+     * plus the checks that are about the document as a whole rather than any
+     * single field.
+     *
+     * @param  array<string, mixed>  $fields
+     * @param  array<string, mixed>  $structured
+     * @return array<int, array<string, mixed>>
+     */
+    private function issues(array $fields, array $structured): array
+    {
+        $issues = [];
+
+        $add = static function (DocumentIssueCode $code, ?string $field = null, ?string $detail = null) use (&$issues): void {
+            $issues[] = array_filter([
+                'code' => $code->value,
+                'message' => $detail ?? $code->message(),
+                'severity' => $code->severity(),
+                'blocks_conversion' => $code->blocksConversion(),
+                'field' => $field,
+            ], static fn ($value) => $value !== null);
+        };
+
+        foreach ($fields as $key => $field) {
+            $state = $field['state'] ?? '';
+
+            if ($state === FieldValidationState::Missing->value) {
+                $add(DocumentIssueCode::RequiredFieldMissing, $key);
+            }
+        }
+
+        if (($fields['document_date']['state'] ?? '') === 'conflict'
+            || ($fields['due_date']['state'] ?? '') === 'conflict') {
+            $add(DocumentIssueCode::InvalidDate);
+        }
+
+        if (($fields['currency_code']['state'] ?? '') === 'conflict') {
+            $add(DocumentIssueCode::InvalidCurrency, 'currency_code');
+        }
+
+        if (($fields['totals.grand_total']['state'] ?? '') === 'conflict') {
+            $add(DocumentIssueCode::TotalMismatch, 'totals.grand_total');
+        }
+
+        foreach ($this->lineIssues($structured['lines'] ?? []) as $issue) {
+            $add(DocumentIssueCode::LineAmountMismatch, null, $issue);
+        }
+
+        if ($this->taxMismatch($fields, $structured['lines'] ?? [])) {
+            $add(DocumentIssueCode::TaxMismatch, 'totals.tax_total');
+        }
+
+        if ($this->balanceMismatch($fields)) {
+            $add(DocumentIssueCode::BalanceMismatch, 'totals.balance_due');
+        }
+
+        if ($this->journalUnbalanced($structured['journal_entry']['lines'] ?? [])) {
+            $add(DocumentIssueCode::JournalUnbalanced);
+        }
+
+        if (($structured['coverage']['complete'] ?? true) === false) {
+            $add(DocumentIssueCode::IncompleteExtraction);
+        }
+
+        return $issues;
+    }
+
+    /**
+     * Per-line arithmetic: amount should equal quantity x rate, less discount,
+     * plus any tax charged on the line.
+     *
+     * Checked only when the line actually carries the inputs — a line with no
+     * rate is a description row, not a broken calculation.
+     *
+     * @param  array<int, array<string, mixed>>  $lines
+     * @return string[]
+     */
+    private function lineIssues(array $lines): array
+    {
+        $issues = [];
+
+        foreach ($lines as $index => $line) {
+            if (! is_array($line)) {
+                continue;
+            }
+
+            $quantity = $this->numeric($line['quantity'] ?? null);
+            $rate = $this->numeric($line['rate'] ?? null);
+            $amount = $this->numeric($line['amount'] ?? null);
+
+            // A derived amount was computed from these very inputs, so checking
+            // it against them proves nothing.
+            if (($line['amount_origin'] ?? '') === 'derived') {
+                continue;
+            }
+
+            if ($quantity === null || $rate === null || $amount === null) {
+                continue;
+            }
+
+            $expected = round(
+                ($quantity * $rate)
+                - ($this->numeric($line['discount'] ?? null) ?? 0.0)
+                + ($this->numeric($line['tax_amount'] ?? null) ?? 0.0),
+                2,
+            );
+
+            // Tolerance scales with the line: a 0.05 absolute allowance is too
+            // tight for a six-figure line where per-unit rounding accumulates.
+            $tolerance = max(self::TOLERANCE, abs($expected) * 0.005);
+
+            if (abs($amount - $expected) > $tolerance) {
+                $label = $line['description'] ?? $line['product_name'] ?? ('line '.($index + 1));
+                $issues[] = sprintf(
+                    '"%s" shows %s but its quantity, rate and tax give %s.',
+                    mb_substr((string) $label, 0, 60),
+                    number_format($amount, 2),
+                    number_format($expected, 2),
+                );
+            }
+        }
+
+        return array_slice($issues, 0, 5);
+    }
+
+    /**
+     * @param  array<string, mixed>  $fields
+     * @param  array<int, array<string, mixed>>  $lines
+     */
+    private function taxMismatch(array $fields, array $lines): bool
+    {
+        // Only meaningful when the document stated a tax total of its own; a
+        // derived one was summed from these lines by definition.
+        if (($fields['totals.tax_total']['origin'] ?? '') !== 'extracted') {
+            return false;
+        }
+
+        $stated = $this->numeric($fields['totals.tax_total']['value'] ?? null);
+
+        if ($stated === null || $lines === []) {
+            return false;
+        }
+
+        $lineTax = 0.0;
+        $anyStated = false;
+
+        foreach ($lines as $line) {
+            $tax = $this->numeric($line['tax_amount'] ?? null);
+
+            if ($tax !== null) {
+                $anyStated = true;
+                $lineTax += $tax;
+            }
+        }
+
+        if (! $anyStated) {
+            return false;
+        }
+
+        return abs($stated - round($lineTax, 2)) > max(self::TOLERANCE, abs($stated) * 0.01);
+    }
+
+    /** @param array<string, mixed> $fields */
+    private function balanceMismatch(array $fields): bool
+    {
+        // Both figures must come from the document; comparing a derived balance
+        // against the total it was derived from can never disagree.
+        foreach (['totals.balance_due', 'totals.paid_amount'] as $key) {
+            if (($fields[$key]['origin'] ?? '') !== 'extracted') {
+                return false;
+            }
+        }
+
+        $grand = $this->numeric($fields['totals.grand_total']['value'] ?? null);
+        $paid = $this->numeric($fields['totals.paid_amount']['value'] ?? null);
+        $balance = $this->numeric($fields['totals.balance_due']['value'] ?? null);
+
+        if ($grand === null || $paid === null || $balance === null) {
+            return false;
+        }
+
+        return abs(($paid + $balance) - $grand) > self::TOLERANCE;
+    }
+
+    /** @param array<int, array<string, mixed>> $lines */
+    private function journalUnbalanced(array $lines): bool
+    {
+        if ($lines === []) {
+            return false;
+        }
+
+        $debit = 0.0;
+        $credit = 0.0;
+
+        foreach ($lines as $line) {
+            if (! is_array($line)) {
+                continue;
+            }
+
+            $debit += $this->numeric($line['debit'] ?? null) ?? 0.0;
+            $credit += $this->numeric($line['credit'] ?? null) ?? 0.0;
+        }
+
+        // An entry with nothing on either side is empty, not unbalanced.
+        if ($debit === 0.0 && $credit === 0.0) {
+            return false;
+        }
+
+        return abs(round($debit - $credit, 2)) > self::TOLERANCE;
+    }
+
+    private function numeric(mixed $value): ?float
+    {
+        return is_numeric($value) ? (float) $value : null;
     }
 
     /**
@@ -149,7 +366,8 @@ final class DocumentValidationService
             : null;
 
         $lineSum = round(array_sum(array_map(
-            static fn ($l) => is_numeric($l['amount'] ?? null) ? (float) $l['amount'] : 0.0,
+            static fn ($l) => (is_numeric($l['amount'] ?? null) ? (float) $l['amount'] : 0.0)
+                - (is_numeric($l['tax_amount'] ?? null) ? (float) $l['tax_amount'] : 0.0),
             $lines,
         )), 2);
 

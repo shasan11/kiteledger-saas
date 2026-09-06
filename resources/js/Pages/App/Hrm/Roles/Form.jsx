@@ -30,7 +30,6 @@ export default function RoleForm(props) {
             <Button icon={<ArrowLeftOutlined />} onClick={goBack}>
               Back
             </Button>
-            <SafetyCertificateOutlined style={{ color: '#1677ff', fontSize: 20 }} />
             <div>
               <h1>{title}</h1>
               <p>Set the role details and assign permissions from the seeded permission list.</p>

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Services\AI\Copilot;
 
 use Illuminate\Support\Carbon;
+use Throwable;
 
 /**
  * Typed Copilot answer that renders the existing HTTP envelope.
@@ -17,15 +18,15 @@ use Illuminate\Support\Carbon;
 final readonly class CopilotResponse
 {
     /**
-     * @param array<string, mixed> $answer
-     * @param array<int, mixed> $actions
-     * @param array<int, mixed> $sources
-     * @param array<int, mixed> $cards
-     * @param array<int, mixed> $tables
-     * @param array<int, string> $warnings
-     * @param array<int, string> $followups
-     * @param array<int, string> $toolsUsed
-     * @param array<string, mixed> $filters
+     * @param  array<string, mixed>  $answer
+     * @param  array<int, mixed>  $actions
+     * @param  array<int, mixed>  $sources
+     * @param  array<int, mixed>  $cards
+     * @param  array<int, mixed>  $tables
+     * @param  array<int, string>  $warnings
+     * @param  array<int, string>  $followups
+     * @param  array<int, string>  $toolsUsed
+     * @param  array<string, mixed>  $filters
      */
     public function __construct(
         public CopilotResponseType $type,
@@ -41,6 +42,14 @@ final readonly class CopilotResponse
         public array $toolsUsed = [],
         public array $filters = [],
         public ?string $currency = null,
+        /**
+         * How that currency is written: code, symbol and decimal places. Sent
+         * so the client renders amounts the tenant's way instead of assuming a
+         * symbol of its own.
+         *
+         * @var array{code: string, symbol: string, decimal_places: int}|null
+         */
+        public ?array $currencyDisplay = null,
         public ?string $branchScopeLabel = null,
         public ?Carbon $asOf = null,
         public bool $verified = false,
@@ -53,8 +62,8 @@ final readonly class CopilotResponse
     }
 
     /**
-     * @param array<int, string> $missingFields
-     * @param array<int, string> $options
+     * @param  array<int, string>  $missingFields
+     * @param  array<int, string>  $options
      */
     public static function clarification(string $message, array $missingFields, array $options = []): self
     {
@@ -85,9 +94,81 @@ final readonly class CopilotResponse
     }
 
     /**
+     * Cache only the reusable answer, never request IDs, encrypted conversation
+     * tokens, traces, or other turn-specific envelope data.
+     *
+     * @return array<string, mixed>
+     */
+    public function toCacheArray(): array
+    {
+        return [
+            'schema' => 1,
+            'type' => $this->type->value,
+            'message' => $this->message,
+            'source_policy' => $this->sourcePolicy->value,
+            'answer' => $this->answer,
+            'actions' => $this->actions,
+            'sources' => $this->sources,
+            'cards' => $this->cards,
+            'tables' => $this->tables,
+            'warnings' => $this->warnings,
+            'followups' => $this->followups,
+            'tools_used' => $this->toolsUsed,
+            'filters' => $this->filters,
+            'currency' => $this->currency,
+            'currency_display' => $this->currencyDisplay,
+            'branch_scope_label' => $this->branchScopeLabel,
+            'as_of' => $this->asOf?->toIso8601String(),
+            'verified' => $this->verified,
+        ];
+    }
+
+    /** Rehydrate a validated cache payload and explicitly mark it as cached. */
+    public static function fromCacheArray(array $payload): ?self
+    {
+        $type = CopilotResponseType::tryFrom((string) ($payload['type'] ?? ''));
+        $policy = AnswerSourcePolicy::tryFrom((string) ($payload['source_policy'] ?? ''));
+        $message = $payload['message'] ?? null;
+
+        if (($payload['schema'] ?? null) !== 1 || ! $type || ! $policy || ! is_string($message)) {
+            return null;
+        }
+
+        try {
+            $rawAsOf = $payload['as_of'] ?? null;
+            $asOf = is_string($rawAsOf) && trim($rawAsOf) !== ''
+                ? Carbon::parse($rawAsOf)
+                : null;
+        } catch (Throwable) {
+            return null;
+        }
+
+        return new self(
+            type: $type,
+            message: $message,
+            sourcePolicy: $policy,
+            answer: is_array($payload['answer'] ?? null) ? $payload['answer'] : [],
+            actions: is_array($payload['actions'] ?? null) ? $payload['actions'] : [],
+            sources: is_array($payload['sources'] ?? null) ? $payload['sources'] : [],
+            cards: is_array($payload['cards'] ?? null) ? $payload['cards'] : [],
+            tables: is_array($payload['tables'] ?? null) ? $payload['tables'] : [],
+            warnings: is_array($payload['warnings'] ?? null) ? $payload['warnings'] : [],
+            followups: is_array($payload['followups'] ?? null) ? $payload['followups'] : [],
+            toolsUsed: is_array($payload['tools_used'] ?? null) ? $payload['tools_used'] : [],
+            filters: is_array($payload['filters'] ?? null) ? $payload['filters'] : [],
+            currency: is_string($payload['currency'] ?? null) ? $payload['currency'] : null,
+            currencyDisplay: is_array($payload['currency_display'] ?? null) ? $payload['currency_display'] : null,
+            branchScopeLabel: is_string($payload['branch_scope_label'] ?? null) ? $payload['branch_scope_label'] : null,
+            asOf: $asOf,
+            verified: (bool) ($payload['verified'] ?? false),
+            cached: true,
+        );
+    }
+
+    /**
      * Envelope consumed by resources/js/Pages/App/AI/Assistant.jsx.
      *
-     * @param array<string, mixed>|null $debug sanitized trace, debug users only
+     * @param  array<string, mixed>|null  $debug  sanitized trace, debug users only
      */
     public function toArray(string $conversationToken, string $requestId, ?array $debug = null): array
     {
@@ -120,6 +201,7 @@ final readonly class CopilotResponse
             'tables' => $this->tables,
             'warnings' => $this->warnings,
             'source_note' => $this->sourcePolicy->evidenceLabel(),
+            'currency' => $this->currencyDisplay,
             'followups' => $this->followups,
             'cached' => $this->cached,
             'request_id' => $requestId,

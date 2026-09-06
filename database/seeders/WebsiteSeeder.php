@@ -59,15 +59,10 @@ class WebsiteSeeder extends Seeder
                 ['title' => 'Financial reporting', 'content' => 'Trial balance, P&L, balance sheet, cash flow, and ledgers ready whenever you are.', 'icon' => 'layers'],
                 ['title' => 'Multi-branch and multi-currency', 'content' => 'Branch-level books and foreign-currency transactions that consolidate cleanly.', 'icon' => 'box'],
             ], null],
-            ['showcase', 'features_mini', 'Inside the product', 'The screens your finance team works in every day', 'Every figure traces back to the transaction that produced it.', 'Explore the platform', '/features', null, null, [
+            ['showcase', 'features', 'Inside the product', 'The screens your finance team works in every day', 'Every figure traces back to the transaction that produced it.', 'Explore the platform', '/features', null, null, [
                 ['title' => 'Financial dashboard', 'content' => 'Revenue, expenses, profit, and cash for any branch and date range.', 'icon' => 'chart'],
                 ['title' => 'Invoicing', 'content' => 'Every invoice with its customer, approval state, and payment history.', 'icon' => 'invoice'],
                 ['title' => 'Reports', 'content' => 'Sixty-three built-in reports across accounting, sales, tax, and stock.', 'icon' => 'box'],
-                ['title' => 'General ledger', 'content' => 'Drill from any balance down to the journal line behind it.', 'icon' => 'layers'],
-                ['title' => 'Bank and reconciliation', 'content' => 'Match statement lines, clear differences, and finalise the period.', 'icon' => 'check'],
-                ['title' => 'Documents', 'content' => 'Upload a bill and track it from scan to posted transaction.', 'icon' => 'workflow'],
-                ['title' => 'Tax settings', 'content' => 'Rates, groups, and treatments applied consistently across documents.', 'icon' => 'shield'],
-                ['title' => 'Approvals', 'content' => 'Credit limits, stock, and pricing rules checked before anything posts.', 'icon' => 'clock'],
             ], 'mist'],
             ['invoice', 'product', 'Receivables', 'Invoice, collect, and reconcile without the chase.', 'Raise estimates, convert them to invoices, record payments against the ledger, and see what is outstanding without exporting anything.', 'Explore invoicing', '/features', null, null, [
                 ['title' => 'Flexible document numbering', 'content' => 'Consistent sequences across branches and document types.'],

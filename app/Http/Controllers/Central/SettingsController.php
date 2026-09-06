@@ -73,7 +73,7 @@ class SettingsController extends Controller
             'tenant_registration.default_plan' => Plan::query()->where('is_active', true)->orderBy('sort_order')->get(['id', 'name'])->map(fn (Plan $plan) => ['value' => $plan->id, 'label' => $plan->name])->values(),
             'tenant_registration.default_data_template' => DefaultDataTemplate::query()->where('is_active', true)->orderBy('name')->get(['id', 'name'])->map(fn (DefaultDataTemplate $template) => ['value' => $template->id, 'label' => $template->name])->values(),
         ];
-        $groups = PlatformSetting::query()->orderBy('group')->orderBy('sort_order')->get()->groupBy('group')->map(fn ($settings) => $settings->map(fn (PlatformSetting $setting) => [
+        $groups = PlatformSetting::query()->where('key', '!=', 'platform.name')->orderBy('group')->orderBy('sort_order')->get()->groupBy('group')->map(fn ($settings) => $settings->map(fn (PlatformSetting $setting) => [
             'id' => $setting->id, 'group' => $setting->group, 'key' => $setting->key, 'label' => $setting->label,
             'description' => $setting->description, 'help_text' => $setting->help_text, 'updated_at' => $setting->updated_at?->toIso8601String(),
             'input_type' => $setting->input_type,

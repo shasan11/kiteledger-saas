@@ -37,14 +37,37 @@ final class CopilotToolRegistry
     /**
      * Tools the model may be shown for this context.
      *
+     * `$only` narrows the result to the tools relevant to the current routing
+     * decision (see CopilotToolScope). It can only subtract from the
+     * permission-filtered set, never add to it, so it is safe for a caller to
+     * pass a list derived from model classification. A narrowing that would
+     * leave no tools at all is ignored for non-empty scopes, because an agent
+     * with no tools would answer a data question from the model's own memory —
+     * exactly the failure mode the narrowing exists to reduce.
+     *
+     * @param  string[]|null  $only  registry tool names, or null for no narrowing
      * @return array<string, CopilotToolDefinition>
      */
-    public function visibleFor(CopilotContext $context): array
+    public function visibleFor(CopilotContext $context, ?array $only = null): array
     {
-        return array_filter(
+        $permitted = array_filter(
             $this->all(),
             fn (CopilotToolDefinition $tool) => $tool->isEnabled() && $this->authorizes($context, $tool),
         );
+
+        if ($only === null) {
+            return $permitted;
+        }
+
+        // An explicitly empty scope means "this turn needs no tools" (a
+        // greeting, a refusal) and is honoured as given.
+        if ($only === []) {
+            return [];
+        }
+
+        $narrowed = array_intersect_key($permitted, array_flip($only));
+
+        return $narrowed !== [] ? $narrowed : $permitted;
     }
 
     /**
@@ -77,10 +100,15 @@ final class CopilotToolRegistry
         $definitions = [
             new CopilotToolDefinition(
                 name: 'financial_metrics.query',
-                description: 'Compute a canonical financial metric with deterministic accounting services.',
+                description: 'Compute a canonical financial or operational metric with deterministic business services.',
                 handler: \App\Neuron\Agents\Tools\QueryFinancialMetricTool::class,
-                requiredAiPermissions: ['ai.financial_queries'],
-                requiredDomainPermissions: ['reports.financial.view', 'inventory.report.view'],
+                requiredAiPermissions: ['ai.financial_queries', 'ai.records.search', 'ai.search'],
+                requiredDomainPermissions: [
+                    'reports.financial.view', 'inventory.report.view',
+                    'crm.leads.view', 'crm.lead.view', 'crm.deals.view', 'crm.deal.view',
+                    'crm.view', 'crm.manage', 'crm.*',
+                    'project.project.view', 'project.task.view', 'project.view', 'project.*',
+                ],
                 readOnly: true,
                 riskLevel: 'low',
                 requiresApproval: false,

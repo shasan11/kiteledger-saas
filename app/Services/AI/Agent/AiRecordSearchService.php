@@ -2,7 +2,9 @@
 
 namespace App\Services\AI\Agent;
 
+use App\Services\AI\AiPermissionService;
 use App\Services\BranchScopeService;
+use Illuminate\Database\Query\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
@@ -24,14 +26,30 @@ class AiRecordSearchService
         'cash_transfers' => ['table' => 'cash_transfers', 'number' => 'transfer_no', 'date' => 'transfer_date', 'amount' => 'amount', 'url' => '/accounting/cash-transfers'],
         'products' => ['table' => 'products', 'number' => 'code', 'date' => 'created_at', 'amount' => null, 'url' => '/inventory/products'],
         'contacts' => ['table' => 'contacts', 'number' => 'code', 'date' => 'created_at', 'amount' => null, 'url' => '/actors/contacts'],
+        'crm_accounts' => ['table' => 'crm_accounts', 'number' => 'account_no', 'date' => 'created_at', 'amount' => null, 'url' => '/crm', 'permissions' => ['crm.accounts.view', 'crm.view', 'crm.manage', 'crm.*']],
+        'leads' => ['table' => 'leads', 'number' => 'lead_no', 'date' => 'created_at', 'amount' => 'expected_value', 'url' => '/crm/leads', 'permissions' => ['crm.leads.view', 'crm.lead.view', 'crm.view', 'crm.manage', 'crm.*']],
+        'deals' => ['table' => 'deals', 'number' => 'deal_no', 'date' => 'created_at', 'amount' => 'amount', 'url' => '/crm/deals', 'permissions' => ['crm.deals.view', 'crm.deal.view', 'crm.view', 'crm.manage', 'crm.*']],
+        'crm_activities' => ['table' => 'crm_activities', 'number' => null, 'date' => 'due_at', 'amount' => null, 'url' => '/crm/activities', 'permissions' => ['crm.activities.view', 'crm.activity.view', 'crm.view', 'crm.manage', 'crm.*']],
+        'crm_campaigns' => ['table' => 'crm_campaigns', 'number' => 'code', 'date' => 'start_date', 'amount' => 'budget', 'url' => '/crm/campaigns', 'permissions' => ['crm.campaigns.view', 'crm.view', 'crm.manage', 'crm.*']],
+        'projects' => ['table' => 'projects', 'number' => null, 'date' => 'start_date', 'amount' => null, 'url' => '/crm/projects', 'permissions' => ['project.project.view', 'project.view', 'project.*']],
+        'milestones' => ['table' => 'milestones', 'number' => null, 'date' => 'end_date', 'amount' => null, 'url' => '/hrm/milestones', 'permissions' => ['project.milestone.view', 'project.project.view', 'project.*']],
+        'tasks' => ['table' => 'tasks', 'number' => null, 'date' => 'end_date', 'amount' => null, 'url' => '/hrm/tasks', 'permissions' => ['project.task.view', 'project.project.view', 'project.*']],
     ];
 
-    public function __construct(protected BranchScopeService $scope) {}
+    public function __construct(
+        protected BranchScopeService $scope,
+        protected AiPermissionService $permissions,
+    ) {}
 
     public function search(Request $request, string $module, string $message, int $limit = 10): ?array
     {
         $config = $this->modules[$module] ?? null;
         if (!$config || !Schema::hasTable($config['table'])) {
+            return null;
+        }
+
+        if (isset($config['permissions'])
+            && ! $this->permissions->hasAny($request->user(), $config['permissions'])) {
             return null;
         }
 
@@ -50,6 +68,8 @@ class AiRecordSearchService
                 $q->where($table . '.active', true)->orWhereNull($table . '.active');
             });
         }
+
+        $this->applyModuleScope($query, $module, $table, $request);
 
         $m = mb_strtolower($message);
         if (str_contains($m, 'draft') && Schema::hasColumn($table, 'approved')) {
@@ -122,5 +142,55 @@ class AiRecordSearchService
             return trim($m[1]);
         }
         return null;
+    }
+
+    private function applyModuleScope(Builder $query, string $module, string $table, Request $request): void
+    {
+        $user = $request->user();
+
+        if (! $user) {
+            $query->whereRaw('1 = 0');
+
+            return;
+        }
+
+        if (in_array($module, ['leads', 'deals', 'crm_activities'], true)
+            && ! $this->permissions->canBypass($user)
+            && ! $this->permissions->hasAny($user, ['crm.manage', 'crm.*'])) {
+            $query->where($table.'.assigned_to_id', $user->getAuthIdentifier());
+        }
+
+        if (! in_array($module, ['projects', 'milestones', 'tasks'], true)
+            || $this->permissions->canBypass($user)) {
+            return;
+        }
+
+        $userId = (int) $user->getAuthIdentifier();
+        $projectColumn = $module === 'projects' ? 'id' : 'project_id';
+
+        $query->whereIn($table.'.'.$projectColumn, function (Builder $projects) use ($userId): void {
+            $projects->select('scoped_projects.id')
+                ->from('projects as scoped_projects')
+                ->where(function (Builder $access) use ($userId): void {
+                    $access->where('scoped_projects.project_manager_id', $userId)
+                        ->orWhere('scoped_projects.user_add_id', $userId)
+                        ->orWhereExists(function (Builder $members) use ($userId): void {
+                            $members->selectRaw('1')
+                                ->from('project_teams')
+                                ->join('project_team_members', 'project_team_members.project_team_id', '=', 'project_teams.id')
+                                ->whereColumn('project_teams.project_id', 'scoped_projects.id')
+                                ->where('project_team_members.user_id', $userId)
+                                ->where('project_team_members.active', true);
+                        })
+                        ->orWhereExists(function (Builder $tasks) use ($userId): void {
+                            $tasks->selectRaw('1')
+                                ->from('tasks as scoped_tasks')
+                                ->join('assigned_tasks', 'assigned_tasks.task_id', '=', 'scoped_tasks.id')
+                                ->whereColumn('scoped_tasks.project_id', 'scoped_projects.id')
+                                ->where('assigned_tasks.user_id', $userId)
+                                ->where('assigned_tasks.active', true);
+                        });
+                });
+        });
     }
 }

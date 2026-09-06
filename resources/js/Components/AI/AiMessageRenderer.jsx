@@ -52,9 +52,11 @@ export default function AiMessageRenderer({ message = {}, onFollowup }) {
                 <Text style={{ whiteSpace: 'pre-wrap', lineHeight: 1.7 }}>{message.content}</Text>
             ) : null}
 
-            <AiSummaryCards cards={message.cards} />
+            <AiSummaryCards cards={message.cards} currency={message.currency} />
             <AiWarningBox warnings={message.warnings} />
-            {(message.tables || []).map((table) => <AiBusinessTable key={table.title} table={table} />)}
+            {(message.tables || []).map((table) => (
+                <AiBusinessTable key={table.title} table={table} currency={message.currency} />
+            ))}
             <AiSourceNote note={message.source_note} />
             <AiFollowUpActions followups={message.followups || answer?.followups} onSelect={onFollowup} />
         </Space>

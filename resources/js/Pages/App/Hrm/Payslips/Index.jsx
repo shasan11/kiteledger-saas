@@ -560,31 +560,6 @@ export default function Payslips({ auth }) {
         }}
       >
         <Space direction="vertical" size={16} style={{ display: 'flex' }}>
-          {overviewLoading ? (
-            <Skeleton active paragraph={{ rows: 2 }} />
-          ) : (
-            <Row gutter={[16, 16]}>
-              <Col xs={24} sm={12} xl={3}>
-                <SummaryCard title="Payslips" value={overview?.total || 0} accent="#1677ff" icon={<CalendarOutlined />} />
-              </Col>
-              <Col xs={24} sm={12} xl={3}>
-                <SummaryCard title="Paid" value={overview?.paidCount || 0} accent="#52c41a" icon={<CheckCircleOutlined />} />
-              </Col>
-              <Col xs={24} sm={12} xl={3}>
-                <SummaryCard title="Unpaid" value={overview?.unpaidCount || 0} accent="#faad14" icon={<WarningOutlined />} />
-              </Col>
-              <Col xs={24} sm={12} xl={3}>
-                <SummaryCard title="Partial" value={overview?.partialCount || 0} accent="#1677ff" icon={<WalletOutlined />} />
-              </Col>
-              <Col xs={24} sm={12} xl={6}>
-                <SummaryCard title="Total Salary" value={overview?.totalSalary || 0} precision={2} accent="#722ed1" icon={<FundOutlined />} />
-              </Col>
-              <Col xs={24} sm={12} xl={6}>
-                <SummaryCard title="Total Payable" value={overview?.totalPayable || 0} precision={2} accent="#13c2c2" icon={<DollarOutlined />} />
-              </Col>
-            </Row>
-          )}
-
           <ReusableCrud
             title="Payslips"
             icon={<DollarOutlined />}

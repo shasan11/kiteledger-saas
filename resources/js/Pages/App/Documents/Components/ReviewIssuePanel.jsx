@@ -1,7 +1,7 @@
-import { Alert, Button, Card, Empty, List, Space, Typography, theme } from 'antd';
-import { CheckCircleOutlined, ExclamationCircleOutlined, WarningOutlined } from '@ant-design/icons';
+import { Typography } from 'antd';
+import { ExclamationCircleFilled, RightOutlined, WarningFilled } from '@ant-design/icons';
 
-const { Text, Title } = Typography;
+const { Text } = Typography;
 
 /*
  * Human-readable names for field keys. The user never sees a dotted path.
@@ -44,92 +44,50 @@ export function fieldLabel(key) {
  * cleanly shows a confirmation, not an empty form.
  */
 export default function ReviewIssuePanel({ review, onSelectIssue }) {
-    const { token } = theme.useToken();
-
     const issues = Object.values(review?.fields || {}).filter((f) => f.needs_review);
     const blocking = issues.filter((i) => i.state === 'missing' || i.state === 'conflict');
 
-    if (issues.length === 0) {
-        return (
-            <Card size="small" style={{ borderColor: token.colorSuccessBorder }}>
-                <Space align="start">
-                    <CheckCircleOutlined style={{ color: token.colorSuccess, fontSize: 18 }} />
-                    <div>
-                        <Text strong>Nothing needs your review</Text>
-                        <div>
-                            <Text type="secondary" style={{ fontSize: 12 }}>
-                                Everything was read clearly and the totals add up.
-                            </Text>
-                        </div>
-                    </div>
-                </Space>
-            </Card>
-        );
-    }
+    if (issues.length === 0) return null;
 
     return (
-        <Card
-            size="small"
-            title={
-                <Space size={8}>
-                    <WarningOutlined style={{ color: token.colorWarning }} />
-                    <Title level={5} style={{ margin: 0 }}>
-                        {issues.length} {issues.length === 1 ? 'item needs' : 'items need'} your review
-                    </Title>
-                </Space>
-            }
-        >
-            {blocking.length > 0 && (
-                <Alert
-                    type="error"
-                    showIcon
-                    icon={<ExclamationCircleOutlined />}
-                    style={{ marginBottom: 12 }}
-                    message={`${blocking.length} must be resolved before a draft can be created`}
-                />
-            )}
+        <aside className="document-review__issues" aria-label="Items requiring review">
+            <div className="document-review__issues-heading">
+                <span className="document-review__issues-icon"><WarningFilled /></span>
+                <div>
+                    <Text strong>{issues.length} {issues.length === 1 ? 'detail needs' : 'details need'} your attention</Text>
+                    <Text type="secondary">
+                        {blocking.length > 0
+                            ? `${blocking.length} ${blocking.length === 1 ? 'issue is' : 'issues are'} blocking draft creation.`
+                            : 'Review these uncertain values before continuing.'}
+                    </Text>
+                </div>
+            </div>
 
-            <List
-                size="small"
-                dataSource={issues}
-                locale={{ emptyText: <Empty description="No issues" /> }}
-                renderItem={(issue, index) => {
+            <div className="document-review__issue-list">
+                {issues.map((issue) => {
                     const label = fieldLabel(issue.key);
                     const describe = STATE_MESSAGE[issue.state] || (() => `${label} needs review`);
+                    const isBlocking = issue.state === 'missing' || issue.state === 'conflict';
 
                     return (
-                        <List.Item
-                            style={{ paddingInline: 0 }}
-                            actions={[
-                                <Button
-                                    key="fix"
-                                    size="small"
-                                    type="link"
-                                    onClick={() => onSelectIssue?.(issue)}
-                                >
-                                    Fix
-                                </Button>,
-                            ]}
+                        <button
+                            key={issue.key}
+                            type="button"
+                            className="document-review__issue"
+                            onClick={() => onSelectIssue?.(issue)}
                         >
-                            <Space align="start" size={8}>
-                                <Text type="secondary" style={{ fontSize: 12, minWidth: 16 }}>
-                                    {index + 1}.
-                                </Text>
-                                <div>
-                                    <Text style={{ fontSize: 13 }}>{describe(label)}</Text>
-                                    {issue.warnings?.[0] && (
-                                        <div>
-                                            <Text type="secondary" style={{ fontSize: 11 }}>
-                                                {issue.warnings[0]}
-                                            </Text>
-                                        </div>
-                                    )}
-                                </div>
-                            </Space>
-                        </List.Item>
+                            <span className={`document-review__issue-state${isBlocking ? ' is-blocking' : ''}`}>
+                                {isBlocking ? <ExclamationCircleFilled /> : <WarningFilled />}
+                            </span>
+                            <span className="document-review__issue-copy">
+                                <Text strong>{describe(label)}</Text>
+                                {issue.warnings?.[0] && <Text type="secondary">{issue.warnings[0]}</Text>}
+                            </span>
+                            <span className="document-review__issue-action">Review <RightOutlined /></span>
+                        </button>
                     );
-                }}
-            />
-        </Card>
+                })}
+            </div>
+        </aside>
     );
 }

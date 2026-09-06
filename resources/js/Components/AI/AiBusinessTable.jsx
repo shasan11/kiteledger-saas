@@ -1,15 +1,17 @@
 import { Card, Empty, Table, Typography } from 'antd';
+import { formatMoney } from '@/utils/money';
 
 const { Text } = Typography;
 
-function renderValue(value, format) {
-    if (format === 'money') {
-        return `NPR ${Number(value || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+/** Money columns are marked as such by the server, which also names the currency. */
+function renderValue(value, format, currency) {
+    if (format === 'money' && value !== null && value !== undefined && value !== '') {
+        return formatMoney(value, currency);
     }
     return value ?? '';
 }
 
-export default function AiBusinessTable({ table }) {
+export default function AiBusinessTable({ table, currency = null }) {
     if (!table) return null;
 
     const columns = (table.columns || []).map((column) => ({
@@ -18,7 +20,7 @@ export default function AiBusinessTable({ table }) {
         key: column.key,
         ellipsis: true,
         align: column.format === 'money' ? 'right' : 'left',
-        render: (value) => renderValue(value, column.format),
+        render: (value) => renderValue(value, column.format, currency),
     }));
 
     return (

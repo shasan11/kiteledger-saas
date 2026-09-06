@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout/index.jsx';
 import { Head } from '@inertiajs/react';
 import axios from 'axios';
-import { Alert, Button, Card, Form, InputNumber, Select, Space, Table, Typography, message } from 'antd';
+import { Alert, Button, Card, Col, Form, InputNumber, List, Row, Select, Space, Steps, Table, Typography, message } from 'antd';
 
 const { Title, Text } = Typography;
 const money = (value) => Number(value || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -13,6 +13,12 @@ export default function PayrollPreview() {
   const [loading, setLoading] = useState(false);
   const [periods, setPeriods] = useState([]);
   const [branches, setBranches] = useState([]);
+  const blockers = [
+    ...(preview?.settings_checklist?.errors || []),
+    ...(preview?.accounting_readiness?.process?.errors || []),
+    ...(preview?.skipped_employees || []).flatMap((employee) => (employee.reasons || []).map((reason) => `${employee.employee_name}: ${reason}`)),
+  ];
+  const ready = preview?.eligible_employee_count > 0 && blockers.length === 0;
 
   useEffect(() => {
     axios.get('/api/hrm/payroll-periods', { params: { page_size: 100 } }).then(({ data }) => setPeriods(data.results || []));
@@ -33,10 +39,14 @@ export default function PayrollPreview() {
   };
 
   const generate = async () => {
+    if (!ready) {
+      message.warning('Check payroll and resolve every blocker before generating.');
+      return;
+    }
     const values = await form.validateFields();
     setLoading(true);
     try {
-      const { data } = await axios.post('/api/hrm/payrolls/generate', { ...values, employee_scope: 'branch', strict: false });
+      const { data } = await axios.post('/api/hrm/payrolls/generate', { ...values, employee_scope: 'branch', strict: true });
       message.success('Payroll generated');
       window.location.href = `/hrm/payroll/${data.id}`;
     } catch (error) {
@@ -53,10 +63,11 @@ export default function PayrollPreview() {
         <Space direction="vertical" size={16} style={{ display: 'flex' }}>
           <Card>
             <Title level={3} style={{ margin: 0 }}>Preview Payroll</Title>
-            <Text type="secondary">Calculate employee-wise payroll before generating payslips.</Text>
+            <Text type="secondary">Choose → check → generate. Nothing is skipped silently.</Text>
           </Card>
           <Card>
-            <Form form={form} layout="inline">
+            <Steps current={ready ? 2 : preview ? 1 : 0} items={[{ title: 'Choose' }, { title: 'Check' }, { title: 'Generate' }]} style={{ marginBottom: 24 }} />
+            <Form form={form} layout="inline" onValuesChange={() => setPreview(null)}>
               <Form.Item name="payroll_period_id" label="Period" rules={[{ required: true }]}>
                 <Select showSearch style={{ width: 260 }} placeholder="Select period" options={periods.map((period) => ({ value: period.id, label: period.name }))} />
               </Form.Item>
@@ -66,11 +77,18 @@ export default function PayrollPreview() {
               <Form.Item name="exchange_rate" label="Exchange Rate" initialValue={1}>
                 <InputNumber min={0.000001} style={{ width: 140 }} />
               </Form.Item>
-              <Button type="primary" loading={loading} onClick={calculate}>Calculate Preview</Button>
-              <Button loading={loading} onClick={generate}>Generate Payroll</Button>
+              <Button type="primary" loading={loading} onClick={calculate}>Check Payroll</Button>
+              <Button loading={loading} disabled={!ready} onClick={generate}>Generate Payslips</Button>
             </Form>
           </Card>
-          {preview?.skipped_employees?.length > 0 && <Alert type="warning" message="Warnings" description={`${preview.skipped_employees.length} employee(s) need setup before generation.`} />}
+          {preview && (blockers.length
+            ? <Alert showIcon type="error" message="Fix these items before generating" description={<List size="small" dataSource={blockers} renderItem={(item) => <List.Item>{item}</List.Item>} />} />
+            : <Alert showIcon type="success" message="Payroll is ready" description={`${preview.eligible_employee_count} employees · Net payable ${money(preview.totals?.net_payable)}`} />)}
+          {preview && <Row gutter={12}>
+            <Col span={8}><Card size="small"><Text type="secondary">Gross</Text><Title level={4}>{money(preview.totals?.gross_earnings)}</Title></Card></Col>
+            <Col span={8}><Card size="small"><Text type="secondary">Deductions</Text><Title level={4}>{money(preview.totals?.total_deductions)}</Title></Card></Col>
+            <Col span={8}><Card size="small"><Text type="secondary">Net pay</Text><Title level={4}>{money(preview.totals?.net_payable)}</Title></Card></Col>
+          </Row>}
           <Card title="Employee Payroll Preview">
             <Table
               rowKey="employee_id"

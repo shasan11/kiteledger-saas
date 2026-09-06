@@ -6,7 +6,9 @@ namespace Tests\Feature\Documents;
 
 use App\Models\DocumentTransactionProposal;
 use App\Models\DocumentUpload;
+use App\Models\Product;
 use App\Models\PurchaseBill;
+use App\Models\PurchaseBillLine;
 use App\Services\Documents\DocumentTransactionConverter;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
@@ -72,6 +74,54 @@ class DocumentConversionSafetyTest extends TestCase
         $this->assertNotEmpty($result['record_id']);
         $this->assertSame('converted', $proposal->fresh()->status);
         $this->assertSame(1, PurchaseBill::count());
+    }
+
+    public function test_conversion_reuses_an_existing_product_by_name(): void
+    {
+        $product = Product::create([
+            'name' => 'Wheel Alignment',
+            'code' => 'WHEEL-ALIGN',
+            'product_type' => 'service',
+            'track_inventory' => false,
+        ]);
+        $proposal = $this->proposal();
+        $payload = $proposal->payload;
+        $payload['lines'] = [[
+            'product_name' => 'wheel alignment',
+            'description' => 'wheel alignment',
+            'qty' => 1,
+            'unit_price' => 70,
+        ]];
+        $proposal->update(['payload' => $payload]);
+
+        app(DocumentTransactionConverter::class)->convert($proposal->fresh());
+
+        $this->assertSame(1, Product::query()->count());
+        $this->assertSame($product->id, PurchaseBillLine::query()->firstOrFail()->product_id);
+    }
+
+    public function test_conversion_creates_a_safe_product_when_no_exact_match_exists(): void
+    {
+        $proposal = $this->proposal();
+        $payload = $proposal->payload;
+        $payload['lines'] = [[
+            'product_code' => 'SVC-42',
+            'product_name' => 'Document preparation',
+            'description' => 'Document preparation',
+            'qty' => 1,
+            'unit_price' => 200,
+        ]];
+        $proposal->update(['payload' => $payload]);
+
+        app(DocumentTransactionConverter::class)->convert($proposal->fresh());
+
+        $product = Product::query()->firstOrFail();
+        $this->assertSame($product->id, PurchaseBillLine::query()->firstOrFail()->product_id);
+        $this->assertSame('Document preparation', $product->name);
+        $this->assertSame('SVC-42', $product->sku);
+        $this->assertSame('service', $product->product_type);
+        $this->assertFalse((bool) $product->track_inventory);
+        $this->assertTrue((bool) $product->is_system_generated);
     }
 
     /**

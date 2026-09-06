@@ -5,6 +5,7 @@ namespace App\Http\Resources;
 use App\Services\AI\AiPermissionService;
 use App\Services\Documents\Pipeline\DocumentErrorCode;
 use App\Services\Documents\Pipeline\DocumentProcessingStage;
+use App\Support\Money\CurrencyFormatter;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -48,6 +49,11 @@ class DocumentExtractionResource extends JsonResource
                 'schema_version' => $this->schema_version,
             ],
 
+            // How to write the amounts in this extraction: the document's own
+            // currency when it declared one, the tenant's base currency
+            // otherwise. Without it the client has to guess a symbol.
+            'currency' => $this->currencyPayload(),
+
             'error' => $this->errorPayload(),
             'error_message' => $this->safeErrorMessage(),
 
@@ -81,6 +87,23 @@ class DocumentExtractionResource extends JsonResource
         }
 
         return $structured;
+    }
+
+    /**
+     * @return array{code: string, symbol: string, decimal_places: int}
+     */
+    private function currencyPayload(): array
+    {
+        $structured = is_array($this->structured_json) ? $this->structured_json : [];
+        $normalized = is_array($this->normalized_json) ? $this->normalized_json : [];
+
+        $code = $structured['fields']['currency_code']['value']
+            ?? $normalized['currency_code']
+            ?? null;
+
+        return app(CurrencyFormatter::class)
+            ->info(is_string($code) ? $code : null)
+            ->toArray();
     }
 
     /** Public error code with an actionable message and recovery options. */

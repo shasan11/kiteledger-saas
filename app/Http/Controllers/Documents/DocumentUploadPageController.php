@@ -10,6 +10,18 @@ use Inertia\Inertia;
 class DocumentUploadPageController extends Controller
 {
     /**
+     * The document types the extractor can classify. Kept here so the inbox
+     * filter and the review workspace's type selector never drift apart.
+     */
+    private const DOCUMENT_TYPES = [
+        'unknown', 'sales_invoice', 'purchase_bill', 'expense_receipt',
+        'customer_payment_slip', 'supplier_payment_slip', 'credit_note',
+        'debit_note', 'journal_voucher', 'purchase_order', 'sales_order',
+        'quotation', 'warehouse_transfer', 'inventory_adjustment',
+        'bank_statement', 'other',
+    ];
+
+    /**
      * Dedicated review workspace.
      *
      * Split from the inbox so reviewing is a focused task with the source
@@ -25,6 +37,7 @@ class DocumentUploadPageController extends Controller
             'publicId' => $publicId,
             'permissions' => $perms->summary(auth()->user()),
             'aiReadiness' => $this->safeAiReadiness($aiReadiness),
+            'documentTypes' => self::DOCUMENT_TYPES,
         ]);
     }
 
@@ -49,13 +62,7 @@ class DocumentUploadPageController extends Controller
                     ['value' => 'sales_order', 'label' => 'Sales Order'],
                     ['value' => 'quotation', 'label' => 'Quotation'],
                 ],
-                'document_types' => [
-                    'unknown', 'sales_invoice', 'purchase_bill', 'expense_receipt',
-                    'customer_payment_slip', 'supplier_payment_slip', 'credit_note',
-                    'debit_note', 'journal_voucher', 'purchase_order', 'sales_order',
-                    'quotation', 'warehouse_transfer', 'inventory_adjustment',
-                    'bank_statement', 'other',
-                ],
+                'document_types' => self::DOCUMENT_TYPES,
                 'ai_readiness' => $this->safeAiReadiness($aiReadiness),
             ],
         ]);

@@ -18,6 +18,7 @@ final readonly class CopilotToolResult
     /**
      * @param array<int, array<string, scalar|null>> $rows
      * @param array<string, mixed> $metrics
+     * @param array<string, string> $displayMetrics
      * @param array<string, mixed> $appliedFilters
      * @param string[] $limitations
      */
@@ -43,6 +44,13 @@ final readonly class CopilotToolResult
          * verbatim — unlike a total re-derived downstream.
          */
         public ?string $summary = null,
+        /**
+         * Each metric already rendered in the tenant's currency, keyed the same
+         * way as $metrics. The model is given these rather than left to invent
+         * a currency symbol or thousands separator for a figure it did not
+         * compute.
+         */
+        public array $displayMetrics = [],
     ) {}
 
     /**
@@ -63,6 +71,8 @@ final readonly class CopilotToolResult
             'fiscal_year_scope' => $this->fiscalYearScope,
             'filters' => $this->appliedFilters,
             'metrics' => $this->metrics,
+            // Quote these verbatim: they carry the currency the raw metrics lack.
+            'metrics_display' => $this->displayMetrics,
             'rows' => $this->rows,
             'limitations' => $this->limitations,
             'as_of' => $this->asOf?->toIso8601String(),

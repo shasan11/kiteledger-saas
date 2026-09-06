@@ -12,4 +12,6 @@ use App\Models\Concerns\RequiresTenantConnection;
 class PayrollRun extends Payroll
 {
     use RequiresTenantConnection;
+
+    protected $table = 'payrolls';
 }

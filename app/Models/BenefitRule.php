@@ -36,6 +36,6 @@ class BenefitRule extends Model
 
     public function accountingAccount(): BelongsTo
     {
-        return $this->belongsTo(Account::class, 'accounting_account_id');
+        return $this->belongsTo(ChartOfAccount::class, 'accounting_account_id');
     }
 }
