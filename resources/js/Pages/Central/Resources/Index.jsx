@@ -7,7 +7,7 @@ import StatusBadge from '@/Components/Central/StatusBadge';
 import { formatDate, formatMoney, humanize } from '@/Components/Central/formatters';
 import { DeleteOutlined, DownloadOutlined, EditOutlined, FilePdfOutlined, PlusOutlined, ReloadOutlined, SearchOutlined } from '@ant-design/icons';
 import { router } from '@inertiajs/react';
-import { Button, Col, Drawer, Form, Input, InputNumber, Modal, Row, Select, Switch, Table, Typography } from 'antd';
+import { Button, Col, Drawer, Form, Input, InputNumber, Modal, Row, Select, Space, Switch, Table, Typography } from 'antd';
 import { useState } from 'react';
 
 const meta = {
